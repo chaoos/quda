@@ -106,8 +106,9 @@ namespace quda
 
     int nodes = 1;
     for (int i = 0; i < ndim; i++) {
-      topo->dims[i] = dims[i];
-      nodes *= dims[i];
+      topo->dims[i] = abs(dims[i]);
+      topo->cstar[i] = dims[i] < 0 ? 1:0;
+      nodes *= topo->dims[i];
     }
 
     topo->ranks = new int[nodes];

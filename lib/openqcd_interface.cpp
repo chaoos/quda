@@ -102,11 +102,13 @@ static int rankFromCoords(const int *coords, void *fdata) // TODO:
  */
 void openQCD_qudaSetLayout(openQCD_QudaLayout_t layout)
 {
+  int mynproc[4];
   for (int dir = 0; dir < 4; ++dir) {
     if (layout.N[dir] % 2 != 0) {
       errorQuda("Error: Odd lattice dimensions are not supported\n");
       exit(1);
     }
+    mynproc[dir] = (dir==2 || dir==1) ? -layout.nproc[dir] : layout.nproc[dir]; 
   }
 
 #ifdef MULTI_GPU
@@ -114,7 +116,7 @@ void openQCD_qudaSetLayout(openQCD_QudaLayout_t layout)
 #ifdef QMP_COMMS
   initCommsGridQuda(4, layout.nproc, nullptr, nullptr);
 #else
-  initCommsGridQuda(4, layout.nproc, rankFromCoords, (void *)(layout.nproc));
+  initCommsGridQuda(4, mynproc, rankFromCoords, (void *)(layout.nproc));
 #endif
   static int device = -1; // enable a default allocation of devices to processes 
 #else
@@ -247,10 +249,10 @@ void openQCD_qudaGaugeLoad(void *gauge, QudaPrecision prec)
 {
   QudaGaugeParam param = newOpenQCDGaugeParam(prec);
 
-  void* buffer = malloc(4*qudaState.init.volume*18*prec);
+  void* buffer = pool_pinned_malloc(4*qudaState.init.volume*18*prec);
   qudaState.init.reorder_gauge_openqcd_to_quda(gauge, buffer);
   loadGaugeQuda(buffer, &param);
-  free(buffer);
+  pool_pinned_free(buffer);
 
   qudaState.gauge_loaded = true;
 }
@@ -260,10 +262,10 @@ void openQCD_qudaGaugeSave(void *gauge, QudaPrecision prec)
 {
   QudaGaugeParam param = newOpenQCDGaugeParam(prec);
 
-  void* buffer = malloc(4*qudaState.init.volume*18*prec);
+  void* buffer = pool_pinned_malloc(4*qudaState.init.volume*18*prec);
   saveGaugeQuda(buffer, &param);
   qudaState.init.reorder_gauge_quda_to_openqcd(buffer, gauge);
-  free(buffer);
+  pool_pinned_free(buffer);
 }
 
 
