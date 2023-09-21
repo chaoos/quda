@@ -130,7 +130,6 @@ namespace quda
     int Nx_displacement = 0;
     for (int i = QUDA_MAX_DIM-1; i >=0; i--) {
       if(topo->cstar[i]==1 ){
-                           () (         1 ry            + 1 dy              + 2 Ry                    )/ Ry               -1)  * 2/2
         Nx_displacement += ((comm_coords(topo)[i] + displacement[i] + comm_dims(topo)[i])/comm_dims(topo)[i] -1) * (comm_dims(topo)[0]/2);
       }
       coords[i] = (i < topo->ndim) ? mod(comm_coords(topo)[i] + displacement[i] + (i==0 ? Nx_displacement :0), comm_dims(topo)[i]) : 0;
