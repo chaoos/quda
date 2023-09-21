@@ -68,7 +68,7 @@ typedef struct {
   double tol;             /* solver tolerance (relative residual) */
   double nmx;             /* maximal number of steps */
   int nkv;                /* number of Krylov vector to keep */
-  double reliable_delta;  /* ???? */
+  double reliable_delta;  /* controls interval at wich accurate residual is updated */
 } openQCD_QudaGCRParam_t;
 
 
@@ -85,6 +85,8 @@ void openQCD_qudaInit(openQCD_QudaInitArgs_t init, openQCD_QudaLayout_t layout);
  * Destroy the QUDA context.
  */
 void openQCD_qudaFinalize(void);
+
+void openQCD_back_and_forth(void *h_in, void *h_out);
 
 
 /**
@@ -132,7 +134,7 @@ void openQCD_qudaDw(void *src, void *dst, openQCD_QudaDiracParam_t p);
  * @param[in]  dirac_param  Dirac parameter struct
  * @param[in]  gcr_param    GCR parameter struct
  */
-void openQCD_qudaGCR(void *source, void *solution,
+double openQCD_qudaGCR(void *source, void *solution,
   openQCD_QudaDiracParam_t dirac_param, openQCD_QudaGCRParam_t gcr_param);
 
 

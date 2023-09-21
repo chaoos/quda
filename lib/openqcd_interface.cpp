@@ -50,6 +50,28 @@ static openQCD_QudaState_t qudaState = {false, false, false, false, {}, {}};
 
 using namespace quda;
 
+template <bool start> void inline qudaopenqcd_called(const char *func, QudaVerbosity verb)
+{
+  // add NVTX markup if enabled
+  if (start) {
+    PUSH_RANGE(func, 1);
+  } else {
+    POP_RANGE;
+  }
+
+  #ifdef QUDAMILC_VERBOSE
+  if (verb >= QUDA_VERBOSE) {
+    if (start) {
+      printfQuda("QUDA_OPENQCD_INTERFACE: %s (called) \n", func);
+    } else {
+      printfQuda("QUDA_OPENQCD_INTERFACE: %s (return) \n", func);
+    }
+  }
+#endif
+}
+
+template <bool start> void inline qudaopenqcd_called(const char *func) { qudaopenqcd_called<start>(func, getVerbosity()); }
+
 
 /**
  * @brief      Returns the local lattice dimensions as lat_dim_t
@@ -205,7 +227,9 @@ void openQCD_qudaInit(openQCD_QudaInitArgs_t init, openQCD_QudaLayout_t layout)
   qudaState.layout = layout;
 
   setVerbosityQuda(qudaState.init.verbosity, "QUDA: ", qudaState.init.logfile);
+  qudaopenqcd_called<true>(__func__);
   openQCD_qudaSetLayout(qudaState.layout);
+  qudaopenqcd_called<false>(__func__);
   qudaState.initialized = true;
 }
 
@@ -378,6 +402,31 @@ static QudaInvertParam newOpenQCDSolverParam(openQCD_QudaDiracParam_t p)
  *
  * @return     norm
  */
+void openQCD_back_and_forth(void *h_in, void *h_out)
+{
+  QudaInvertParam param = newOpenQCDParam();
+
+  ColorSpinorParam cpuParam(h_in, param, get_local_dims(), false, QUDA_CPU_FIELD_LOCATION);
+  ColorSpinorField in_h(cpuParam);
+
+  ColorSpinorParam cudaParam(cpuParam, param, QUDA_CUDA_FIELD_LOCATION);
+  ColorSpinorField in(cudaParam);
+
+  ColorSpinorParam cpuParam_out(h_out, param, get_local_dims(), false, QUDA_CPU_FIELD_LOCATION);
+  ColorSpinorField out_h(cpuParam_out);
+
+  in = in_h;
+  out_h = in;
+}
+
+
+/**
+ * @brief      Calculates the norm of a spinor.
+ *
+ * @param[in]  h_in  input spinor of type spinor_dble[NSPIN]
+ *
+ * @return     norm
+ */
 double openQCD_qudaNorm(void *h_in)
 {
   QudaInvertParam param = newOpenQCDParam();
@@ -432,6 +481,8 @@ void openQCD_qudaGamma(const int dir, void *openQCD_in, void *openQCD_out)
   case 4:
   case 5:
     gamma5(out, in);
+    /* gamma5_openqcd = -1 * gamma5_ukqcd */
+    blas::caxpby(Complex(-1.0, 0.0), out, 0.0, out);
     break;
   default:
     errorQuda("Unknown gamma: %d\n", dir);
@@ -456,10 +507,12 @@ void openQCD_qudaDw(void *src, void *dst, openQCD_QudaDiracParam_t p)
   param.output_location = QUDA_CPU_FIELD_LOCATION;
 
   MatQuda(static_cast<char *>(dst), static_cast<char *>(src), &param);
+  /* AA: QUDA applies - Dw */
+  /* blas::ax(-1.0, dst); */
 }
 
 
-void openQCD_qudaGCR(void *source, void *solution,
+double openQCD_qudaGCR(void *source, void *solution,
   openQCD_QudaDiracParam_t dirac_param, openQCD_QudaGCRParam_t gcr_param)
 {
   QudaInvertParam param = newOpenQCDSolverParam(dirac_param);
@@ -482,6 +535,8 @@ void openQCD_qudaGCR(void *source, void *solution,
   printfQuda("gflops      = %.2e\n", param.gflops);
   printfQuda("secs        = %.2e\n", param.secs);
   printfQuda("Nsteps      = %d\n",   param.Nsteps);
+
+  return param.true_res;
 }
 
 
