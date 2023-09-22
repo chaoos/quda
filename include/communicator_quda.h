@@ -141,7 +141,8 @@ namespace quda
       } else {
         coords[i] = 0;
       }
-      std::cout << coords << std::endl;
+      std::cout << coords[0] << " " << coords[1] << " " << coords[2] <<
+        " " << coords[3] << " " << coords[4] << " " << coords[5] << std::endl;
     }
 
     return comm_rank_from_coords(topo, coords);
