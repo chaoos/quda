@@ -130,7 +130,20 @@ void openQCD_qudaSetLayout(openQCD_QudaLayout_t layout)
       errorQuda("Error: Odd lattice dimensions are not supported\n");
       exit(1);
     }
-    mynproc[dir] = (dir==2 || dir==1) ? -layout.nproc[dir] : layout.nproc[dir]; 
+    if(0 <= layout.cstar && layout.cstar <= 1) {
+      /* 0: this is equivalent to periodic boundary conditions */
+      /* 1: this is equivalent to periodic boundary conditions if
+        we double the lattice in x-direction */
+      mynproc[dir] = layout.nproc[dir];
+    } else if(layout.cstar == 2) {
+      /* only modify y-direction (1) when hopping */
+      mynproc[dir] = (dir==1) ? -layout.nproc[dir] : layout.nproc[dir]; 
+    } else if(layout.cstar == 3) {
+      /* modify y- and z-direction (1, 2) when hopping */
+      mynproc[dir] = (dir==2 || dir==1) ? -layout.nproc[dir] : layout.nproc[dir]; 
+    } else {
+      errorQuda("Unexpected argument cstar = %d\n", layout.cstar);
+    }
   }
 
 #ifdef MULTI_GPU
