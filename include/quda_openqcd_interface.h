@@ -27,6 +27,7 @@ typedef struct {
   int nproc_blk[4]; /** Blocking size NPROC0_BLK, NPROC1_BLK, NPROC2_BLK, NPROC3_BLK */
   int N[4];         /** Glocal lattice dimensions N0, N1, N2, N3 */
   int device;       /** GPU device number */
+  int cstar;        /** number of cstar directions */
 } openQCD_QudaLayout_t;
 
 
