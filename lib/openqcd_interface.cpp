@@ -227,9 +227,9 @@ void openQCD_qudaInit(openQCD_QudaInitArgs_t init, openQCD_QudaLayout_t layout)
   qudaState.layout = layout;
 
   setVerbosityQuda(qudaState.init.verbosity, "QUDA: ", qudaState.init.logfile);
-  qudaopenqcd_called<true>(__func__);
+  PUSH_RANGE("openQCD_qudaInit", 0);
   openQCD_qudaSetLayout(qudaState.layout);
-  qudaopenqcd_called<false>(__func__);
+  POP_RANGE();
   qudaState.initialized = true;
 }
 
