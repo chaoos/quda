@@ -785,6 +785,66 @@ void openQCD_qudaGamma(const int dir, void *openQCD_in, void *openQCD_out)
 }
 
 
+// /* This function will take the openQCD_field, initialize a copy as quda managed (TODO: and deallocate the original) */
+// void* openQCD_from_OpenQCD_field_2_managed_ColorSpinorField(void *openQCD_field, size_t bytes)
+// {
+//   /* sets up the necessary parameters */
+//   QudaInvertParam param = newOpenQCDParam();
+
+//   /* creates a field on the CPU */
+//   ColorSpinorParam cpuParam(openQCD_field, param, get_local_dims(), false, QUDA_CPU_FIELD_LOCATION);
+//   ColorSpinorField in_h(cpuParam);
+
+//   /* creates a field on the GPU with the same parameter set as the CPU field */
+//   ColorSpinorParam cudaParam(cpuParam, param, QUDA_CUDA_FIELD_LOCATION);
+//   ColorSpinorField *in = new ColorSpinorField(cudaParam);
+
+//   *in = in_h; /* transfer the CPU field to GPU */
+
+//   return in;
+// }
+
+
+// This function is to allocate a field in the GPU via managed memory (setup via external env variable)
+// the data() function retrieves the void pointer to the field's data.
+void* openQCD_unified_field_init(void *openQCD_field)
+{
+  warningQuda("The openQCD_unified_field_init function initializes a field in Unified Memory assuming the QUDA_ENABLE_MANAGED_MEMORY=1 environment variable is set.");
+  /* sets up the necessary parameters */
+  QudaInvertParam param = newOpenQCDParam();
+
+  /* creates a field on the CPU */
+  ColorSpinorParam cpuParam(openQCD_field, param, get_local_dims(), false, QUDA_CPU_FIELD_LOCATION);
+  ColorSpinorField in_h(cpuParam);
+  /* Heap allocate unified field */
+  ColorSpinorParam cudaParam(cpuParam, param, QUDA_CUDA_FIELD_LOCATION);
+  ColorSpinorField *in = new ColorSpinorField(cudaParam);
+  *in = in_h; /* transfer the CPU field to GPU */
+
+  return in;
+}
+
+void* openQCD_unified_field_data(void *unified_field)
+{
+  warningQuda("The openQCD_unified_field_data function assumes a pointer to the Unified Memory field as input.");
+  /* sets up the necessary parameters */
+  return reinterpret_cast<ColorSpinorField*>(unified_field)->data();
+}
+
+void openQCD_unified_field_free(void* quda_field)
+{
+  delete reinterpret_cast<ColorSpinorField*>(quda_field);
+  // quda_field = nullptr;
+}
+
+
+
+
+// This was in the milc interface but seeems unnecessary:
+// void *qudaAllocateManaged(size_t bytes) { return managed_malloc(bytes); }
+// void qudaFreeManaged(void *ptr) { managed_free(ptr); }
+
+
 void* openQCD_qudaH2D(void *openQCD_field)
 {
   /* sets up the necessary parameters */
@@ -804,13 +864,6 @@ void* openQCD_qudaH2D(void *openQCD_field)
 }
 
 
-void openQCD_qudaSpinorFree(void** quda_field)
-{
-  delete reinterpret_cast<ColorSpinorField*>(*quda_field);
-  *quda_field = nullptr;
-}
-
-
 void openQCD_qudaD2H(void *quda_field, void *openQCD_field)
 {
   int my_rank;
@@ -827,6 +880,11 @@ void openQCD_qudaD2H(void *quda_field, void *openQCD_field)
   out_h = *reinterpret_cast<ColorSpinorField*>(quda_field);
 }
 
+void openQCD_qudaSpinorFree(void** quda_field)
+{
+  delete reinterpret_cast<ColorSpinorField*>(*quda_field);
+  *quda_field = nullptr;
+}
 
 void openQCD_qudaDw(void *src, void *dst, openQCD_QudaDiracParam_t p)
 {

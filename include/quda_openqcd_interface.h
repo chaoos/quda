@@ -211,6 +211,9 @@ double openQCD_qudaNorm_NoLoads(void *d_in);
  */
 void openQCD_qudaGamma(const int dir, void *openQCD_in, void *openQCD_out);
 
+void* openQCD_unified_field_init(void *openQCD_field);
+void* openQCD_unified_field_data(void *unified_field);
+void openQCD_unified_field_free(void* quda_field);
 
 void* openQCD_qudaH2D(void *openQCD_field);
 void openQCD_qudaD2H(void *quda_field, void *openQCD_field);
