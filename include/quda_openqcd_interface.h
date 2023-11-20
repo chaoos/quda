@@ -215,6 +215,8 @@ void* openQCD_unified_field_init(void *openQCD_field);
 void* openQCD_unified_field_data(void *unified_field);
 void openQCD_unified_field_free(void* quda_field);
 
+void openQCD_print_quda_field(void* quda_field, int parity, unsigned int x_cb, int rank);
+
 void* openQCD_qudaH2D(void *openQCD_field);
 void openQCD_qudaD2H(void *quda_field, void *openQCD_field);
 void openQCD_qudaSpinorFree(void** quda_field);

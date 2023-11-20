@@ -805,8 +805,7 @@ void openQCD_qudaGamma(const int dir, void *openQCD_in, void *openQCD_out)
 // }
 
 
-// This function is to allocate a field in the GPU via managed memory (setup via external env variable)
-// the data() function retrieves the void pointer to the field's data.
+// This function is to allocate a field in the GPU via managed memory (remember to setup relevant env variables)
 void* openQCD_unified_field_init(void *openQCD_field)
 {
   warningQuda("The openQCD_unified_field_init function initializes a field in Unified Memory assuming the QUDA_ENABLE_MANAGED_MEMORY=1 environment variable is set.");
@@ -819,25 +818,35 @@ void* openQCD_unified_field_init(void *openQCD_field)
   /* Heap allocate unified field */
   ColorSpinorParam cudaParam(cpuParam, param, QUDA_CUDA_FIELD_LOCATION);
   ColorSpinorField *in = new ColorSpinorField(cudaParam);
-  *in = in_h; /* transfer the CPU field to GPU */
-
+  *in = in_h; /* transfer the CPU field data to the unified field */
+  warningQuda("Site subset is: %d\n", in->SiteSubset());
   return in;
 }
 
+// This function gives OpenQxD access to pointer where the field's data is located (in unified memory); the ColorSpinorField::data() function retrieves this pointer.
 void* openQCD_unified_field_data(void *unified_field)
 {
   warningQuda("The openQCD_unified_field_data function assumes a pointer to the Unified Memory field as input.");
-  /* sets up the necessary parameters */
+  
+  auto tmp = reinterpret_cast<ColorSpinorField*>(unified_field)->data();
+
+  auto test = reinterpret_cast<quda_ptr*>(tmp);
+  std::cout << *test << std::endl;
+
   return reinterpret_cast<ColorSpinorField*>(unified_field)->data();
 }
 
+// This function de-allocate the unified field.
 void openQCD_unified_field_free(void* quda_field)
 {
   delete reinterpret_cast<ColorSpinorField*>(quda_field);
-  // quda_field = nullptr;
+  // quda_field = nullptr; /* Maybe needed */
 }
 
-
+void openQCD_print_quda_field(void* quda_field, int parity, unsigned int x_cb, int rank)
+{
+  genericPrintVector(reinterpret_cast<ColorSpinorField*>(quda_field)[0], parity, x_cb, rank);
+}
 
 
 // This was in the milc interface but seeems unnecessary:
