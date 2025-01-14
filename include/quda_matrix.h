@@ -13,28 +13,6 @@ namespace quda {
   template <typename T> constexpr bool is_nan(T x) { return x != x; }
 
   template<class T>
-    struct Zero
-    {
-      //static const T val;
-      __device__ __host__ inline
-        static T val();
-    };
-
-  template<>
-    __device__ __host__ inline
-    float2 Zero<float2>::val()
-    {
-      return make_float2(0.,0.);
-    }
-
-  template<>
-    __device__ __host__ inline
-    double2 Zero<double2>::val()
-    {
-      return make_double2(0.,0.);
-    }
-
-  template<class T>
     struct Identity
     {
       __device__  __host__ inline
@@ -207,15 +185,12 @@ namespace quda {
 
 #pragma unroll
           for (int i=0; i<N; ++i){
-            if( fabs(identity(i,i).real() - 1.0) > max_error ||
-                fabs(identity(i,i).imag()) > max_error) return false;
+            if (abs(identity(i, i).real() - 1.0) > max_error || abs(identity(i, i).imag()) > max_error) return false;
 
 #pragma unroll
             for (int j=i+1; j<N; ++j){
-              if( fabs(identity(i,j).real()) > max_error ||
-                  fabs(identity(i,j).imag()) > max_error ||
-                  fabs(identity(j,i).real()) > max_error ||
-                  fabs(identity(j,i).imag()) > max_error ){
+              if (abs(identity(i, j).real()) > max_error || abs(identity(i, j).imag()) > max_error
+                  || abs(identity(j, i).real()) > max_error || abs(identity(j, i).imag()) > max_error) {
                 return false;
               }
             }
@@ -432,7 +407,6 @@ namespace quda {
       for (int i = 0; i < a.size(); i++) result.data[i] = a.data[i] + b.data[i];
       return result;
     }
-
 
   template< template<typename,int> class Mat, class T, int N>
     __device__ __host__ inline Mat<T,N> operator+=(Mat<T,N> & a, const Mat<T,N> & b)
@@ -675,15 +649,6 @@ namespace quda {
         (*m)(i, i) = 1;
 #pragma unroll
         for (int j = i + 1; j < N; ++j) { (*m)(i, j) = (*m)(j, i) = {}; }
-      }
-    }
-
-    template <class T, int N> __device__ __host__ inline void setZero(Matrix<T, N> *m)
-    {
-#pragma unroll
-      for (int i = 0; i < N; ++i) {
-#pragma unroll
-        for (int j = 0; j < N; ++j) { (*m)(i, j) = {}; }
       }
     }
 
@@ -988,8 +953,7 @@ namespace quda {
       }
 
       //[19] Construct exp{iQ}
-      Matrix<T, 3> exp_iQ;
-      setZero(&exp_iQ);
+      Matrix<T, 3> exp_iQ = {};
       Matrix<T,3> UnitM;
       setIdentity(&UnitM);
       // +f0*I

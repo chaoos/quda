@@ -95,8 +95,9 @@ namespace quda
      @param[out] dataDs Output smeared field
      @param[in] dataOr Input gauge field
      @param[in] alpha smearing parameter
+     @param[in] dir_ignore ignored direction
   */
-  void APEStep(GaugeField &dataDs, GaugeField &dataOr, double alpha);
+  void APEStep(GaugeField &dataDs, GaugeField &dataOr, double alpha, int dir_ignore);
 
   /**
      @brief Apply STOUT smearing to the gauge field
@@ -104,8 +105,9 @@ namespace quda
      @param[out] dataDs Output smeared field
      @param[in] dataOr Input gauge field
      @param[in] rho smearing parameter
+     @param[in] dir_ignore ignored direction
   */
-  void STOUTStep(GaugeField &dataDs, GaugeField &dataOr, double rho);
+  void STOUTStep(GaugeField &dataDs, GaugeField &dataOr, double rho, int dir_ignore);
 
   /**
      @brief Apply Over Improved STOUT smearing to the gauge field
@@ -114,8 +116,20 @@ namespace quda
      @param[in] dataOr Input gauge field
      @param[in] rho smearing parameter
      @param[in] epsilon smearing parameter
+     @param[in] dir_ignore ignored direction
   */
-  void OvrImpSTOUTStep(GaugeField &dataDs, GaugeField &dataOr, double rho, double epsilon);
+  void OvrImpSTOUTStep(GaugeField &dataDs, GaugeField &dataOr, double rho, double epsilon, int dir_ignore);
+
+  /**
+     @brief Apply HYP smearing to the gauge field
+     @param[out] dataDs Output smeared field
+     @param[in] dataOr Input gauge field
+     @param[in] alpha1 smearing parameter
+     @param[in] alpha2 smearing parameter
+     @param[in] alpha3 smearing parameter
+     @param[in] dir_ignore ignored direction
+  */
+  void HYPStep(GaugeField &dataDs, GaugeField &dataOr, double alpha1, double alpha2, double alpha3, int dir_ignore);
 
   /**
      @brief Apply Wilson Flow steps W1, W2, Vt to the gauge field.
@@ -123,13 +137,29 @@ namespace quda
      extended, with the input field being exchanged prior to calling
      this function.  On exit from this routine, the output field will
      have been exchanged.
-     @param[out] dataDs Output smeared field
-     @param[in] dataTemp Temp space
-     @param[in] dataOr Input gauge field
+     @param[out] out Output smeared field
+     @param[in] temp Temp space
+     @param[in] in Input gauge field
      @param[in] epsilon Step size
      @param[in] smear_type Wilson (1x1) or Symanzik improved (2x1) staples, else error
   */
   void WFlowStep(GaugeField &out, GaugeField &temp, GaugeField &in, double epsilon, QudaGaugeSmearType smear_type);
+
+  /**
+     @brief Apply intermediary Wilson Flow steps W1, W2 or Vt to the gauge field.
+     This routine assumes that the input and output fields are
+     extended, with the input field being exchanged prior to calling
+     this function.  On exit from this routine, the output field will
+     have been exchanged.
+     @param[out] out Output smeared field
+     @param[in] temp Temp space
+     @param[in] in Input gauge field
+     @param[in] epsilon Step size
+     @param[in] smear_type Wilson (1x1) or Symanzik improved (2x1) staples, else error
+     @param[in] step_type Which intermediary Wilson Flow step (W1, W2 or Vt) to perform
+  */
+  void GFlowStep(GaugeField &out, GaugeField &temp, GaugeField &in, double epsilon, QudaGaugeSmearType smear_type,
+                 QudaWFlowStepType step_type);
 
   /**
    * @brief Gauge fixing with overrelaxation with support for single and multi GPU.

@@ -3,6 +3,21 @@
 #include <host_utils.h>
 #include "misc.h"
 
+void setGaugeSmearParam(QudaGaugeSmearParam &smear_param)
+{
+  smear_param.smear_type = gauge_smear_type;
+  smear_param.alpha = gauge_smear_alpha;
+  smear_param.rho = gauge_smear_rho;
+  smear_param.epsilon = gauge_smear_epsilon;
+  smear_param.n_steps = gauge_smear_steps;
+  smear_param.meas_interval = measurement_interval;
+  smear_param.alpha1 = gauge_smear_alpha1;
+  smear_param.alpha2 = gauge_smear_alpha2;
+  smear_param.alpha3 = gauge_smear_alpha3;
+  smear_param.dir_ignore = gauge_smear_dir_ignore;
+  smear_param.struct_size = sizeof(smear_param);
+}
+
 void setGaugeParam(QudaGaugeParam &gauge_param)
 {
   gauge_param.type = QUDA_SU3_LINKS;
@@ -114,22 +129,26 @@ void setInvertParam(QudaInvertParam &inv_param)
 {
   // Set dslash type
   inv_param.dslash_type = dslash_type;
+  int dimension = laplace3D < 4 ? 3 : 4;
 
   // Use kappa or mass normalisation
   if (kappa == -1.0) {
     inv_param.mass = mass;
     inv_param.kappa = 1.0 / (2.0 * (1 + 3 / anisotropy + mass));
-    if (dslash_type == QUDA_LAPLACE_DSLASH) inv_param.kappa = 1.0 / (8 + mass);
+    if (dslash_type == QUDA_LAPLACE_DSLASH) inv_param.kappa = 1.0 / (2 * dimension + mass);
   } else {
     inv_param.kappa = kappa;
     inv_param.mass = 0.5 / kappa - (1.0 + 3.0 / anisotropy);
-    if (dslash_type == QUDA_LAPLACE_DSLASH) inv_param.mass = 1.0 / kappa - 8.0;
+    if (dslash_type == QUDA_LAPLACE_DSLASH) inv_param.mass = 1.0 / kappa - 2 * dimension;
   }
   if (getVerbosity() >= QUDA_DEBUG_VERBOSE)
     printfQuda("Kappa = %.8f Mass = %.8f\n", inv_param.kappa, inv_param.mass);
 
   // Use 3D or 4D laplace
   inv_param.laplace3D = laplace3D;
+
+  if (Nsrc < Nsrc_tile || Nsrc % Nsrc_tile != 0)
+    errorQuda("Invalid combination Nsrc = %d Nsrc_tile = %d", Nsrc, Nsrc_tile);
 
   // Some fermion specific parameters
   if (dslash_type == QUDA_TWISTED_MASS_DSLASH || dslash_type == QUDA_TWISTED_CLOVER_DSLASH) {
@@ -277,6 +296,22 @@ void setInvertParam(QudaInvertParam &inv_param)
   inv_param.struct_size = sizeof(inv_param);
 }
 
+void setFermionSmearParam(QudaInvertParam &smear_param, double omega, int steps)
+{
+  // Construct a copy of the current invert parameters
+  setInvertParam(smear_param);
+
+  // Construct 4D smearing parameters.
+  smear_param.dslash_type = QUDA_LAPLACE_DSLASH;
+  double smear_coeff = -1.0 * omega * omega / (4 * steps);
+  smear_param.mass_normalization = QUDA_KAPPA_NORMALIZATION; // Enforce kappa normalisation
+  smear_param.mass = 1.0;
+  smear_param.kappa = smear_coeff;
+  smear_param.laplace3D = laplace3D; // Omit this dim
+  smear_param.solution_type = QUDA_MAT_SOLUTION;
+  smear_param.solve_type = QUDA_DIRECT_SOLVE;
+}
+
 // Parameters defining the eigensolver
 void setEigParam(QudaEigParam &eig_param)
 {
@@ -305,6 +340,7 @@ void setEigParam(QudaEigParam &eig_param)
   }
 
   eig_param.ortho_block_size = eig_ortho_block_size;
+  eig_param.compute_evals_batch_size = eig_evals_batch_size;
   eig_param.block_size
     = (eig_param.eig_type == QUDA_EIG_TR_LANCZOS || eig_param.eig_type == QUDA_EIG_IR_ARNOLDI) ? 1 : eig_block_size;
   eig_param.n_ev = eig_n_ev;
@@ -444,6 +480,7 @@ void setMultigridParam(QudaMultigridParam &mg_param)
 
     mg_param.spin_block_size[i] = 1;
     mg_param.n_vec[i] = nvec[i] == 0 ? 24 : nvec[i]; // default to 24 vectors if not set
+    mg_param.n_vec_batch[i] = nvec_batch[i] == 0 ? 1 : nvec_batch[i]; // default to batch size 1 if not set
     mg_param.n_block_ortho[i] = n_block_ortho[i];    // number of times to Gram-Schmidt
     mg_param.block_ortho_two_pass[i]
       = block_ortho_two_pass[i] ? QUDA_BOOLEAN_TRUE : QUDA_BOOLEAN_FALSE; // whether to use a two-pass block ortho
@@ -762,6 +799,8 @@ void setMultigridEigParam(QudaEigParam &mg_eig_param, int level)
   mg_eig_param.n_ev = mg_eig_n_ev[level];
   mg_eig_param.n_kr = mg_eig_n_kr[level];
   mg_eig_param.n_conv = nvec[level];
+  mg_eig_param.compute_evals_batch_size
+    = mg_eig_evals_batch_size[level] ? mg_eig_evals_batch_size[level] : eig_evals_batch_size;
 
   // Inverters will deflate only this number of vectors.
   if (mg_eig_n_ev_deflate[level] > 0 && mg_eig_n_ev_deflate[level] < mg_eig_param.n_conv)
@@ -901,8 +940,12 @@ void setStaggeredInvertParam(QudaInvertParam &inv_param)
   // Solver params
   inv_param.verbosity = verbosity;
   inv_param.mass = mass;
-  inv_param.kappa = kappa = 1.0 / (8.0 + mass); // for Laplace operator
+  int dimension = laplace3D < 4 ? 3 : 4;
+  inv_param.kappa = 1.0 / (2 * dimension + mass); // for Laplace operator
   inv_param.laplace3D = laplace3D;              // for Laplace operator
+
+  if (Nsrc < Nsrc_tile || Nsrc % Nsrc_tile != 0)
+    errorQuda("Invalid combination Nsrc = %d Nsrc_tile = %d", Nsrc, Nsrc_tile);
 
   // outer solver parameters
   inv_param.inv_type = inv_type;
@@ -914,8 +957,10 @@ void setStaggeredInvertParam(QudaInvertParam &inv_param)
   inv_param.use_sloppy_partial_accumulator = false;
   inv_param.solution_accumulator_pipeline = solution_accumulator_pipeline;
   inv_param.pipeline = pipeline;
+  inv_param.max_res_increase = max_res_increase;
+  inv_param.max_res_increase_total = max_res_increase_total;
 
-  inv_param.Ls = 1; // Nsrc
+  inv_param.Ls = 1;
 
   if (tol_hq == 0 && tol == 0) {
     errorQuda("qudaInvert: requesting zero residual\n");
@@ -937,9 +982,11 @@ void setStaggeredInvertParam(QudaInvertParam &inv_param)
 
   // domain decomposition preconditioner parameters
   inv_param.inv_type_precondition = precon_type;
+  inv_param.schwarz_type = precon_schwarz_type;
+  inv_param.precondition_cycle = precon_schwarz_cycle;
   inv_param.tol_precondition = tol_precondition;
   inv_param.maxiter_precondition = maxiter_precondition;
-  inv_param.verbosity_precondition = QUDA_SILENT;
+  inv_param.verbosity_precondition = verbosity_precondition;
   inv_param.cuda_prec_precondition = prec_precondition;
   inv_param.cuda_prec_eigensolver = prec_eigensolver;
 
@@ -952,11 +999,16 @@ void setStaggeredInvertParam(QudaInvertParam &inv_param)
   inv_param.ca_lambda_min = ca_lambda_min;
   inv_param.ca_lambda_max = ca_lambda_max;
 
+  // Set preconditioner CA info
+  inv_param.ca_basis_precondition = ca_basis_precondition;
+  inv_param.ca_lambda_min_precondition = ca_lambda_min_precondition;
+  inv_param.ca_lambda_max_precondition = ca_lambda_max_precondition;
+
   inv_param.solution_type = solution_type;
   inv_param.solve_type = solve_type;
   inv_param.matpc_type = matpc_type;
   inv_param.dagger = QUDA_DAG_NO;
-  inv_param.mass_normalization = QUDA_MASS_NORMALIZATION;
+  inv_param.mass_normalization = dslash_type == QUDA_LAPLACE_DSLASH ? QUDA_KAPPA_NORMALIZATION : QUDA_MASS_NORMALIZATION;
 
   inv_param.cpu_prec = cpu_prec;
   inv_param.cuda_prec = prec;
@@ -1044,6 +1096,7 @@ void setStaggeredMultigridParam(QudaMultigridParam &mg_param)
 
     mg_param.spin_block_size[i] = 1;
     mg_param.n_vec[i] = nvec[i] == 0 ? 64 : nvec[i]; // default to 64 vectors if not set
+    mg_param.n_vec_batch[i] = nvec_batch[i] == 0 ? 1 : nvec_batch[i]; // default to batch size 1 if not set
     mg_param.n_block_ortho[i] = n_block_ortho[i];    // number of times to Gram-Schmidt
     mg_param.block_ortho_two_pass[i]
       = block_ortho_two_pass[i] ? QUDA_BOOLEAN_TRUE : QUDA_BOOLEAN_FALSE; // whether to use a two-pass block ortho
@@ -1372,112 +1425,60 @@ void setDeflationParam(QudaEigParam &df_param)
   df_param.partfile = eig_partfile ? QUDA_BOOLEAN_TRUE : QUDA_BOOLEAN_FALSE;
 }
 
-void setQudaStaggeredInvTestParams()
+/**********/
+// The enumerated staggered tests have been removed, but for reference:
+//
+// Test 0:
+//   solve_type = QUDA_DIRECT_SOLVE
+//   matpc_type = QUDA_MATPC_EVEN_EVEN (doesn't matter)
+//   solution_type = QUDA_MAT_SOLUTION
+//
+// Test 1:
+//   solve_type = QUDA_DIRECT_PC_SOLVE
+//   matpc_type = QUDA_MATPC_EVEN_EVEN
+//   solution_type = QUDA_MAT_SOLUTION
+//
+// Test 2:
+//   solve_type = QUDA_DIRECT_PC_SOLVE
+//   matpc_type = QUDA_MATPC_ODD_ODD
+//   solution_type = QUDA_MAT_SOLUTION
+//
+// Test 3:
+//   solve_type = QUDA_DIRECT_PC_SOLVE
+//   matpc_type = QUDA_MATPC_EVEN_EVEN
+//   solution_type = QUDA_MATPC_SOLUTION
+//
+// Test 4:
+//   solve_type = QUDA_DIRECT_PC_SOLVE
+//   matpc_type = QUDA_MATPC_ODD_ODD
+//   solution_type = QUDA_MATPC_SOLUTION
+//
+// Test 5: multi-shift
+//   solve_type = QUDA_DIRECT_PC_SOLVE
+//   matpc_type = QUDA_MATPC_EVEN_EVEN
+//   solution_type = QUDA_MATPC_SOLUTION
+//
+// Test 6: multi-shift
+//   solve_type = QUDA_DIRECT_PC_SOLVE
+//   matpc_type = QUDA_MATPC_ODD_ODD
+//   solution_type = QUDA_MATPC_SOLUTION
+/**********/
+
+void setQudaStaggeredDefaultInvTestParams()
 {
-  if (dslash_type == QUDA_LAPLACE_DSLASH) {
-    if (test_type != 0) { errorQuda("Test type %d is not supported for the Laplace operator.\n", test_type); }
+  // Set some meaningful defaults for staggered tests
 
-    solve_type = QUDA_DIRECT_SOLVE;
-    solution_type = QUDA_MAT_SOLUTION;
-    matpc_type = QUDA_MATPC_EVEN_EVEN; // doesn't matter
+  // Default to the ASQTAD dslash
+  dslash_type = QUDA_ASQTAD_DSLASH;
 
-  } else {
+  // Default to a Schur-preconditioned CG solve
+  solve_type = QUDA_DIRECT_PC_SOLVE;
+  solution_type = QUDA_MATPC_SOLUTION;
+  matpc_type = QUDA_MATPC_EVEN_EVEN;
+  inv_type = QUDA_CG_INVERTER;
 
-    if (test_type == 0 && (inv_type == QUDA_CG_INVERTER || inv_type == QUDA_PCG_INVERTER)
-        && solve_type != QUDA_NORMOP_SOLVE && solve_type != QUDA_DIRECT_PC_SOLVE) {
-      warningQuda("The full spinor staggered operator (test 0) can't be inverted with (P)CG. Switching to BiCGstab.\n");
-      inv_type = QUDA_BICGSTAB_INVERTER;
-    }
-
-    if (solve_type == QUDA_INVALID_SOLVE) {
-      if (test_type == 0) {
-        solve_type = QUDA_DIRECT_SOLVE;
-      } else {
-        solve_type = QUDA_DIRECT_PC_SOLVE;
-      }
-    }
-
-    if (test_type == 1 || test_type == 3 || test_type == 5) {
-      matpc_type = QUDA_MATPC_EVEN_EVEN;
-    } else if (test_type == 2 || test_type == 4 || test_type == 6) {
-      matpc_type = QUDA_MATPC_ODD_ODD;
-    } else if (test_type == 0) {
-      matpc_type = QUDA_MATPC_EVEN_EVEN; // it doesn't matter
-    }
-
-    if (test_type == 0 || test_type == 1 || test_type == 2) {
-      solution_type = QUDA_MAT_SOLUTION;
-    } else {
-      solution_type = QUDA_MATPC_SOLUTION;
-    }
-  }
-
-  if (prec_sloppy == QUDA_INVALID_PRECISION) { prec_sloppy = prec; }
-
-  if (prec_refinement_sloppy == QUDA_INVALID_PRECISION) { prec_refinement_sloppy = prec_sloppy; }
-  if (link_recon_sloppy == QUDA_RECONSTRUCT_INVALID) { link_recon_sloppy = link_recon; }
-
-  if (inv_type != QUDA_CG_INVERTER && (test_type == 5 || test_type == 6)) {
-    errorQuda("Preconditioning is currently not supported in multi-shift solver solvers");
-  }
-
-  // Set n_naiks to 2 if eps_naik != 0.0
-  if (dslash_type == QUDA_ASQTAD_DSLASH) {
-    if (eps_naik != 0.0) {
-      if (compute_fatlong) {
-        n_naiks = 2;
-        printfQuda("Note: epsilon-naik != 0, testing epsilon correction links.\n");
-      } else {
-        eps_naik = 0.0;
-        printfQuda("Not computing fat-long, ignoring epsilon correction.\n");
-      }
-    } else {
-      printfQuda("Note: epsilon-naik = 0, testing original HISQ links.\n");
-    }
-  }
-}
-
-void setQudaStaggeredEigTestParams()
-{
-  if (dslash_type == QUDA_LAPLACE_DSLASH) {
-    // LAPLACE operator path, only DIRECT solves feasible.
-    if (test_type != 0) { errorQuda("Test type %d is not supported for the Laplace operator.\n", test_type); }
-    solve_type = QUDA_DIRECT_SOLVE;
-    solution_type = QUDA_MAT_SOLUTION;
-  } else {
-    // STAGGERED operator path
-    if (solve_type == QUDA_INVALID_SOLVE) {
-      if (test_type == 0) {
-        solve_type = QUDA_DIRECT_SOLVE;
-      } else {
-        solve_type = QUDA_DIRECT_PC_SOLVE;
-      }
-    }
-    // If test type is not 3, it is 4 or 0. If 0, the matpc type is irrelevant
-    if (test_type == 3)
-      matpc_type = QUDA_MATPC_EVEN_EVEN;
-    else
-      matpc_type = QUDA_MATPC_ODD_ODD;
-
-    if (test_type == 0) {
-      solution_type = QUDA_MAT_SOLUTION;
-    } else {
-      solution_type = QUDA_MATPC_SOLUTION;
-    }
-  }
-
-  // Set n_naiks to 2 if eps_naik != 0.0
-  if (dslash_type == QUDA_ASQTAD_DSLASH) {
-    if (eps_naik != 0.0) {
-      if (compute_fatlong) {
-        n_naiks = 2;
-        printfQuda("Note: epsilon-naik != 0, testing epsilon correction links.\n");
-      } else {
-        eps_naik = 0.0;
-        printfQuda("Not computing fat-long, ignoring epsilon correction.\n");
-      }
-    } else {
-      printfQuda("Note: epsilon-naik = 0, testing original HISQ links.\n");
-    }
-  }
+  // For an eigensolve, default to using the "regular" operator instead of the normal
+  // operator because the Schur operator is already HPD
+  eig_use_normop = QUDA_BOOLEAN_FALSE;
+  eig_use_pc = true;
 }

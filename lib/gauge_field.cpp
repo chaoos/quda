@@ -317,9 +317,9 @@ namespace quda {
   {
     LatticeField::setTuningString();
     std::stringstream aux_ss;
-    aux_ss << "vol=" << volume << "stride=" << stride << "precision=" << precision << "geometry=" << geometry
-           << "Nc=" << nColor;
-    if (ghostExchange == QUDA_GHOST_EXCHANGE_EXTENDED) aux_ss << "r=" << r[0] << r[1] << r[2] << r[3];
+    aux_ss << "vol=" << volume << ",stride=" << stride << ",precision=" << precision << ",geometry=" << geometry
+           << ",Nc=" << nColor;
+    if (ghostExchange == QUDA_GHOST_EXCHANGE_EXTENDED) aux_ss << ",r=" << r[0] << r[1] << r[2] << r[3];
     aux_string = aux_ss.str();
     if (aux_string.size() >= TuneKey::aux_n / 2) errorQuda("Aux string too large %lu", aux_string.size());
   }
@@ -1273,27 +1273,26 @@ namespace quda {
   }
 
   // helper for creating extended gauge fields
-  GaugeField *createExtendedGauge(GaugeField &in, const lat_dim_t &R, TimeProfile &profile, bool redundant_comms,
+  GaugeField *createExtendedGauge(const GaugeField &in, const lat_dim_t &R, TimeProfile &profile, bool redundant_comms,
                                   QudaReconstructType recon)
   {
     GaugeFieldParam gParamEx(in);
-    // gParamEx.location = QUDA_CUDA_FIELD_LOCATION;
     gParamEx.ghostExchange = QUDA_GHOST_EXCHANGE_EXTENDED;
     gParamEx.pad = 0;
     gParamEx.nFace = 1;
-    gParamEx.tadpole = in.Tadpole();
-    gParamEx.anisotropy = in.Anisotropy();
     for (int d = 0; d < 4; d++) {
       gParamEx.x[d] += 2 * R[d];
       gParamEx.r[d] = R[d];
     }
-    if (recon != QUDA_RECONSTRUCT_INVALID) gParamEx.reconstruct = recon;
-    gParamEx.setPrecision(gParamEx.Precision(), true);
+    if (recon != QUDA_RECONSTRUCT_INVALID && recon != in.Reconstruct()) {
+      gParamEx.reconstruct = recon;
+      gParamEx.setPrecision(gParamEx.Precision());
+    }
 
     auto *out = new GaugeField(gParamEx);
 
     // copy input field into the extended device gauge field
-    copyExtendedGauge(*out, in, QUDA_CUDA_FIELD_LOCATION); // wrong location if both fields cpu
+    copyExtendedGauge(*out, in, in.Location());
 
     // now fill up the halos
     out->exchangeExtendedGhost(R, profile, redundant_comms);
@@ -1375,7 +1374,7 @@ namespace quda {
       qudaMemcpy(buffer, data(), Bytes(), qudaMemcpyDeviceToHost);
     } else {
       if (is_pointer_array(order)) {
-        char *dst_buffer = reinterpret_cast<char *>(buffer);
+        char *dst_buffer = static_cast<char *>(buffer);
         for (int d = 0; d < site_dim; d++) {
           std::memcpy(&dst_buffer[d * bytes / site_dim], gauge_array[d].data(), bytes / site_dim);
         }
@@ -1396,7 +1395,7 @@ namespace quda {
       qudaMemcpy(data(), buffer, Bytes(), qudaMemcpyHostToDevice);
     } else {
       if (is_pointer_array(order)) {
-        const char *dst_buffer = reinterpret_cast<const char *>(buffer);
+        const char *dst_buffer = static_cast<const char *>(buffer);
         for (int d = 0; d < site_dim; d++) {
           std::memcpy(gauge_array[d].data(), &dst_buffer[d * bytes / site_dim], bytes / site_dim);
         }
@@ -1409,6 +1408,11 @@ namespace quda {
         errorQuda("Unsupported order = %d", Order());
       }
     }
+  }
+
+  void GaugeField::PrintMatrix(int dim, int parity, unsigned int x_cb, int rank) const
+  {
+    genericPrintMatrix(*this, dim, parity, x_cb, rank);
   }
 
 } // namespace quda

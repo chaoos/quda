@@ -144,7 +144,7 @@ namespace quda
       n_items(field.Volume()),
       block_size_y(block_size_y)
     {
-      if (commAsyncReduction()) strcat(aux, "async,");
+      if (commAsyncReduction()) strcat(aux, ",async");
     }
 
     /**
@@ -155,7 +155,7 @@ namespace quda
     TunableReduction2D(size_t n_items, QudaFieldLocation location) :
       TunableKernel(n_items, location), n_items(n_items), block_size_y(1)
     {
-      if (commAsyncReduction()) strcat(aux, "async,");
+      if (commAsyncReduction()) strcat(aux, ",async");
     }
 
     /**
@@ -166,6 +166,7 @@ namespace quda
     {
       TunableKernel::initTuneParam(param);
       param.block.y = block_size_y;
+      setSharedBytes(param);
     }
 
     /**
@@ -176,6 +177,7 @@ namespace quda
     {
       TunableKernel::defaultTuneParam(param);
       param.block.y = block_size_y;
+      setSharedBytes(param);
     }
   };
 
@@ -323,14 +325,20 @@ namespace quda
       if (rtn) {
         return true;
       } else {
+
+        auto next = param;
+        next.block.z++;
+        auto shared_bytes = setSharedBytes(next);
+
         if (param.block.z < n_batch && param.block.z < device::max_threads_per_block_dim(2)
             && param.block.x * param.block.y * (param.block.z + 1) <= device::max_threads_per_block()
-            && param.block.z < n_batch_block_max) {
+            && param.block.z < n_batch_block_max && shared_bytes <= this->maxSharedBytesPerBlock()) {
           param.block.z++;
           param.grid.z = (n_batch + param.block.z - 1) / param.block.z;
+          param.shared_bytes = shared_bytes;
           return true;
         } else { // we have run off the end so let's reset
-          param.block.z = 1;
+          param.block.z = std::max(1u, (n_batch + device::max_grid_size(2) - 1) / device::max_grid_size(2));
           param.grid.z = (n_batch + param.block.z - 1) / param.block.z;
           return false;
         }
@@ -344,8 +352,10 @@ namespace quda
     void initTuneParam(TuneParam &param) const
     {
       TunableReduction2D::initTuneParam(param);
-      param.block = {param.block.x, param.block.y, 1};
+      param.block = {param.block.x, param.block.y,
+                     std::max(1u, (n_batch + device::max_grid_size(2) - 1) / device::max_grid_size(2))};
       param.grid = {param.grid.x, param.grid.y, (n_batch + param.block.z - 1) / param.block.z};
+      setSharedBytes(param);
     }
 
     /**
@@ -355,8 +365,10 @@ namespace quda
     void defaultTuneParam(TuneParam &param) const
     {
       TunableReduction2D::defaultTuneParam(param);
-      param.block = {param.block.x, param.block.y, 1};
+      param.block = {param.block.x, param.block.y,
+                     std::max(1u, (n_batch + device::max_grid_size(2) - 1) / device::max_grid_size(2))};
       param.grid = {param.grid.x, param.grid.y, (n_batch + param.block.z - 1) / param.block.z};
+      setSharedBytes(param);
     }
   };
 

@@ -17,18 +17,20 @@ endif()
 
 set (QUDA_OBJS
   # cmake-format: sortable
-  dirac_coarse.cpp dslash_coarse.cpp
+  solve.cpp monitor.cpp dirac_coarse.cpp dslash_coarse.cpp
   coarse_op.cpp coarsecoarse_op.cpp
   coarse_op_preconditioned.cpp staggered_coarse_op.cpp
-  eig_iram.cpp eig_trlm.cpp eig_block_trlm.cpp vector_io.cpp
-  eigensolve_quda.cpp quda_arpack_interface.cpp
+  eig_iram.cpp eig_trlm.cpp eig_block_trlm.cpp
+  eig_trlm_3d.cpp blas_3d.cu
+  vector_io.cpp eigensolve_quda.cpp quda_arpack_interface.cpp
   multigrid.cpp transfer.cpp block_orthogonalize.cpp
   prolongator.cpp restrictor.cpp staggered_prolong_restrict.cu
   gauge_phase.cu timer.cpp
   solver.cpp inv_bicgstab_quda.cpp inv_cg_quda.cpp inv_bicgstabl_quda.cpp
   inv_multi_cg_quda.cpp inv_eigcg_quda.cpp gauge_ape.cu
-  gauge_stout.cu gauge_wilson_flow.cu gauge_plaq.cu
+  gauge_stout.cu gauge_hyp.cu gauge_wilson_flow.cu gauge_plaq.cu
   gauge_laplace.cpp gauge_observable.cpp
+  inv_cgnr.cpp inv_cgne.cpp
   inv_cg3_quda.cpp inv_ca_gcr.cpp inv_ca_cg.cpp
   inv_gcr_quda.cpp inv_mr_quda.cpp inv_sd_quda.cpp
   inv_pcg_quda.cpp inv_mre.cpp interface_quda.cpp util_quda.cpp
@@ -36,6 +38,7 @@ set (QUDA_OBJS
   field_cache.cpp
   gauge_covdev.cpp dirac.cpp
   clover_field.cpp lattice_field.cpp gauge_field.cpp
+  evec_project.cu
   extract_gauge_ghost.cu
   gauge_norm.cu gauge_update_quda.cu
   max_clover.cu dirac_clover.cpp dirac_wilson.cpp dirac_staggered.cpp
@@ -51,10 +54,11 @@ set (QUDA_OBJS
   madwf_transfer.cu madwf_tensor.cu
   blas_quda.cu multi_blas_quda.cu reduce_quda.cu
   multi_reduce_quda.cu reduce_helper.cu
-  contract.cu comm_common.cpp communicator_stack.cpp
+  contract.cu spin_taste.cu comm_common.cpp communicator_stack.cpp
+  clover_force.cpp
   clover_deriv_quda.cu clover_invert.cu copy_gauge_extended.cu
   extract_gauge_ghost_extended.cu copy_color_spinor.cpp
-  spinor_noise.cu spinor_dilute.cu
+  spinor_noise.cu spinor_dilute.cu spinor_reweight.cu
   copy_color_spinor_dd.cu copy_color_spinor_ds.cu
   copy_color_spinor_dh.cu copy_color_spinor_dq.cu
   copy_color_spinor_ss.cu copy_color_spinor_sd.cu
@@ -94,8 +98,11 @@ set (QUDA_OBJS
 set(QUDA_DSLASH_OBJS 
   dslash_quda.cu color_spinor_pack.cu
   dslash_staggered.cu dslash_improved_staggered.cu
-  dslash_wilson.cu dslash_wilson_clover.cu dslash5_domain_wall.cu
-  dslash_wilson_clover_preconditioned.cu 
+  dslash_wilson.cu dslash_wilson_distance.cu
+  dslash_wilson_clover.cu dslash_wilson_clover_distance.cu
+  dslash_wilson_clover_preconditioned.cu
+  dslash_wilson_clover_preconditioned_distance.cu
+  dslash5_domain_wall.cu
   dslash_twisted_mass.cu dslash_twisted_mass_preconditioned.cu
   dslash_ndeg_twisted_mass.cu dslash_ndeg_twisted_mass_preconditioned.cu
   dslash_twisted_clover.cu dslash_twisted_clover_preconditioned.cu
@@ -110,7 +117,7 @@ set(QUDA_DSLASH_OBJS
   dslash_domain_wall_4d_m5inv_m5inv.cu
   dslash_domain_wall_4d_m5mob.cu
   dslash_domain_wall_4d_m5pre_m5mob.cu
-  dslash_pack2.cu laplace.cu covDev.cu staggered_quark_smearing.cu)
+  dslash_pack2.cu laplace.cu covariant_derivative.cu staggered_quark_smearing.cu)
 
 if(QUDA_NVSHMEM)
   list(APPEND QUDA_DSLASH_OBJS dslash_constant_arg.cu)
@@ -289,6 +296,12 @@ if(${QUDA_TARGET_TYPE} STREQUAL "SYCL")
   include(targets/sycl/target_sycl.cmake)
 endif()
 
+# Set the maximum multi-RHS per kernel if not already set by the target
+if(NOT DEFINED QUDA_MAX_MULTI_RHS)
+  set(QUDA_MAX_MULTI_RHS "16" CACHE STRING "maximum number of simultaneous RHS in a kernel")
+  message(STATUS "Max number of rhs per kernel: ${QUDA_MAX_MULTI_RHS}")
+endif()
+
 # make one library
 target_sources(quda PRIVATE $<TARGET_OBJECTS:quda_cpp> $<$<TARGET_EXISTS:quda_pack>:$<TARGET_OBJECTS:quda_pack>>
                             ${QUDA_CU_OBJS})
@@ -340,13 +353,13 @@ add_subdirectory(targets/generic)
 target_include_directories(quda PRIVATE ../include/targets/generic)
 add_subdirectory(interface)
 
-# ignore any unkown pragmas
+# ignore any unknown pragmas
 target_compile_options(quda_cpp PUBLIC $<$<COMPILE_LANGUAGE:CXX>:
   $<$<CXX_COMPILER_ID:Clang>:-Wno-unknown-pragmas>
   $<$<CXX_COMPILER_ID:GNU>:-Wno-unknown-pragmas>
   >)
 
-# add some deifnitions that cause issues with cmake 3.7 and nvcc only to cpp files
+# add some definitions that cause issues with cmake 3.7 and nvcc only to cpp files
 target_compile_definitions(quda_cpp PUBLIC -DQUDA_HASH="${HASH}")
 if(GITVERSION)
   target_compile_definitions(quda_cpp PUBLIC -DGITVERSION="${GITVERSION}")
@@ -475,6 +488,7 @@ endif()
 
 if(QUDA_OPENMP)
   target_link_libraries(quda PUBLIC OpenMP::OpenMP_CXX)
+  target_compile_definitions(quda PUBLIC QUDA_OPENMP)
 endif()
 
 # set which precisions to enable

@@ -19,53 +19,51 @@ namespace quda
 
   protected:
     const DiracMatrix &mat;
-    QudaEigParam *eig_param;
-    TimeProfile &profile;
+    QudaEigParam *eig_param = nullptr;
 
     // Problem parameters
     //------------------
-    int n_ev;         /** Size of initial factorisation */
-    int n_kr;         /** Size of Krylov space after extension */
-    int n_conv;       /** Number of converged eigenvalues requested */
-    int n_ev_deflate; /** Number of converged eigenvalues to use in deflation */
-    double tol;       /** Tolerance on eigenvalues */
-    bool reverse;     /** True if using polynomial acceleration */
-    char spectrum[3]; /** Part of the spectrum to be computed */
+    int n_ev = 0;         /** Size of initial factorisation */
+    int n_kr = 0;         /** Size of Krylov space after extension */
+    int n_conv = 0;       /** Number of converged eigenvalues requested */
+    int n_ev_deflate = 0; /** Number of converged eigenvalues to use in deflation */
+    double tol = 0.0;     /** Tolerance on eigenvalues */
+    bool reverse = false; /** True if using polynomial acceleration */
+    std::string spectrum; /** Part of the spectrum to be computed */
     bool compute_svd; /** Compute the SVD if requested **/
 
     // Algorithm variables
     //--------------------
-    bool converged;
-    int restart_iter;
-    int max_restarts;
-    int max_ortho_attempts;
-    int check_interval;
-    int batched_rotate;
-    int block_size;
-    int ortho_block_size;
-    int iter;
-    int iter_converged;
-    int iter_locked;
-    int iter_keep;
-    int num_converged;
-    int num_locked;
-    int num_keep;
+    bool converged = false;
+    int restart_iter = 0;
+    int max_restarts = 0;
+    int max_ortho_attempts = 0;
+    int check_interval = 0;
+    int batched_rotate = 0;
+    int block_size = 0;
+    int ortho_block_size = 0;
+    int iter = 0;
+    int iter_converged = 0;
+    int iter_locked = 0;
+    int iter_keep = 0;
+    int num_converged = 0;
+    int num_locked = 0;
+    int num_keep = 0;
 
-    std::vector<double> residua;
+    std::vector<double> residua = {};
 
     // Device side vector workspace
-    std::vector<ColorSpinorField> r;
-    std::vector<ColorSpinorField> d_vecs_tmp;
+    std::vector<ColorSpinorField> r = {};
+    std::vector<ColorSpinorField> d_vecs_tmp = {};
 
-    QudaPrecision save_prec;
+    QudaPrecision save_prec = QUDA_INVALID_PRECISION;
 
   public:
     /**
        @brief Constructor for base Eigensolver class
        @param eig_param MGParam struct that defines all meta data
-       @param profile Timeprofile instance used to profile
     */
-    EigenSolver(const DiracMatrix &mat, QudaEigParam *eig_param, TimeProfile &profile);
+    EigenSolver(const DiracMatrix &mat, QudaEigParam *eig_param);
 
     /**
        Destructor for EigenSolver class.
@@ -88,9 +86,8 @@ namespace quda
        @brief Creates the eigensolver using the parameters given and the matrix.
        @param eig_param The eigensolver parameters
        @param mat The operator to solve
-       @param profile Time Profile
      */
-    static EigenSolver *create(QudaEigParam *eig_param, const DiracMatrix &mat, TimeProfile &profile);
+    static EigenSolver *create(QudaEigParam *eig_param, const DiracMatrix &mat);
 
     /**
        @brief Check for an initial guess. If none present, populate with rands, then
@@ -151,7 +148,7 @@ namespace quda
        @param[in] out Output spinor
        @param[in] in Input spinor
     */
-    double estimateChebyOpMax(ColorSpinorField &out, ColorSpinorField &in);
+    virtual double estimateChebyOpMax(ColorSpinorField &out, ColorSpinorField &in);
 
     /**
        @brief Orthogonalise input vectors r against
@@ -189,11 +186,10 @@ namespace quda
        @param[in] dim The number of rows in the rotation array
        @param[in] keep The number of columns in the rotation array
        @param[in] locked The number of locked vectors in kSpace
-       @param[in] profile Time profiler
     */
     template <typename T>
-    void rotateVecs(std::vector<ColorSpinorField> &kSpace, const std::vector<T> &rot_array,
-                    int offset, int dim, int keep, int locked, TimeProfile &profile);
+    void rotateVecs(std::vector<ColorSpinorField> &kSpace, const std::vector<T> &rot_array, int offset, int dim,
+                    int keep, int locked);
 
     /**
        @brief Permute the vector space using the permutation matrix.
@@ -268,22 +264,10 @@ namespace quda
        @brief Compute eigenvalues and their residiua
        @param[in] mat Matrix operator
        @param[in] evecs The eigenvectors
-       @param[in] evals The eigenvalues
+       @param[in,out] evals The eigenvalues
        @param[in] size The number of eigenvalues to compute
     */
-    void computeEvals(std::vector<ColorSpinorField> &evecs, std::vector<Complex> &evals,
-                      int size);
-
-    /**
-       @brief Compute eigenvalues and their residiua.  This variant compute the number of converged eigenvalues.
-       @param[in] mat Matrix operator
-       @param[in] evecs The eigenvectors
-       @param[in] evals The eigenvalues
-    */
-    void computeEvals(std::vector<ColorSpinorField> &evecs, std::vector<Complex> &evals)
-    {
-      computeEvals(evecs, evals, n_conv);
-    }
+    virtual void computeEvals(std::vector<ColorSpinorField> &evecs, std::vector<Complex> &evals, int size = 0);
 
     /**
        @brief Load and check eigenpairs from file
@@ -350,27 +334,26 @@ namespace quda
   */
   class TRLM : public EigenSolver
   {
+  protected:
+    // Variable size matrix
+    std::vector<double> ritz_mat = {};
+
+    // Tridiagonal/Arrow matrix, fixed size.
+    std::vector<double> alpha = {};
+    std::vector<double> beta = {};
 
   public:
     /**
        @brief Constructor for Thick Restarted Eigensolver class
        @param eig_param The eigensolver parameters
        @param mat The operator to solve
-       @param profile Time Profile
     */
-    TRLM(const DiracMatrix &mat, QudaEigParam *eig_param, TimeProfile &profile);
+    TRLM(const DiracMatrix &mat, QudaEigParam *eig_param);
 
     /**
        @return Whether the solver is only for Hermitian systems
     */
     virtual bool hermitian() { return true; } /** TRLM is only for Hermitian systems */
-
-    // Variable size matrix
-    std::vector<double> ritz_mat;
-
-    // Tridiagonal/Arrow matrix, fixed size.
-    std::vector<double> alpha;
-    std::vector<double> beta;
 
     /**
        @brief Compute eigenpairs
@@ -410,29 +393,28 @@ namespace quda
   */
   class BLKTRLM : public TRLM
   {
+    // Variable size matrix
+    std::vector<Complex> block_ritz_mat = {};
+
+    /** Block Tridiagonal/Arrow matrix, fixed size. */
+    std::vector<Complex> block_alpha = {};
+    std::vector<Complex> block_beta = {};
+
+    /** Temp storage used in blockLanczosStep, fixed size. */
+    std::vector<Complex> jth_block = {};
+
+    /** Size of blocks of data in alpha/beta */
+    int block_data_length = 0;
+
   public:
     /**
        @brief Constructor for Thick Restarted Eigensolver class
        @param eig_param The eigensolver parameters
        @param mat The operator to solve
-       @param profile Time Profile
     */
-    BLKTRLM(const DiracMatrix &mat, QudaEigParam *eig_param, TimeProfile &profile);
+    BLKTRLM(const DiracMatrix &mat, QudaEigParam *eig_param);
 
     virtual bool hermitian() { return true; } /** (BLOCK)TRLM is only for Hermitian systems */
-
-    // Variable size matrix
-    std::vector<Complex> block_ritz_mat;
-
-    /** Block Tridiagonal/Arrow matrix, fixed size. */
-    std::vector<Complex> block_alpha;
-    std::vector<Complex> block_beta;
-
-    /** Temp storage used in blockLanczosStep, fixed size. */
-    std::vector<Complex> jth_block;
-
-    /** Size of blocks of data in alpha/beta */
-    int block_data_length;
 
     /**
        @brief Compute eigenpairs
@@ -469,23 +451,131 @@ namespace quda
   };
 
   /**
-     @brief Implicitly Restarted Arnoldi Method.
+     @brief Thick Restarted Lanczos Method for 3D slices
   */
-  class IRAM : public EigenSolver
+  class TRLM3D : public EigenSolver
   {
+    bool verbose_rank = false; /** Whether this rank is one that logs */
 
   public:
-    std::vector<std::vector<Complex>> upperHess;
-    std::vector<std::vector<Complex>> Qmat;
-    std::vector<std::vector<Complex>> Rmat;
-
     /**
        @brief Constructor for Thick Restarted Eigensolver class
        @param eig_param The eigensolver parameters
        @param mat The operator to solve
-       @param profile Time Profile
     */
-    IRAM(const DiracMatrix &mat, QudaEigParam *eig_param, TimeProfile &profile);
+    TRLM3D(const DiracMatrix &mat, QudaEigParam *eig_param);
+
+    /**
+       @return Whether the solver is only for Hermitian systems
+    */
+    virtual bool hermitian() override { return true; } /** TRLM3D is only for Hermitian systems */
+
+    // Variable size matrix (for the 3D problem)
+    std::vector<std::vector<double>> ritz_mat_3D;
+
+    // Arrays for 3D residua
+    std::vector<std::vector<double>> residua_3D;
+
+    // Array for convergence
+    std::vector<bool> converged_3D;
+    std::vector<bool> active_3D;
+    std::vector<int> iter_locked_3D;
+    std::vector<int> iter_keep_3D;
+    std::vector<int> iter_converged_3D;
+    std::vector<int> num_locked_3D;
+    std::vector<int> num_keep_3D;
+    std::vector<int> num_converged_3D;
+
+    // Tridiagonal/Arrow matrices, fixed size (for the 3D problem)
+    std::vector<std::vector<double>> alpha_3D;
+    std::vector<std::vector<double>> beta_3D;
+
+    // The orthogonal direction and size in the 3D problem
+    int ortho_dim;
+    int ortho_dim_size;
+
+    /**
+       @brief Compute eigenpairs
+       @param[in] kSpace Krylov vector space
+       @param[in] evals Computed eigenvalues
+    */
+    void operator()(std::vector<ColorSpinorField> &kSpace, std::vector<Complex> &evals) override;
+
+    /**
+       @brief Lanczos step: extends the Krylov space.
+       @param[in] v Vector space
+       @param[in] j Index of vector being computed
+    */
+    void lanczosStep3D(std::vector<ColorSpinorField> &v, int j);
+
+    /**
+       @brief Reorder the Krylov space by eigenvalue
+       @param[in] kSpace the Krylov space
+    */
+    void reorder3D(std::vector<ColorSpinorField> &kSpace);
+
+    /**
+       @brief Get the eigendecomposition from the arrow matrix
+    */
+    void eigensolveFromArrowMat3D();
+
+    /**
+       @brief Rotate the Ritz vectors using the arrow matrix eigendecomposition
+       @param[in] nKspace current Krylov space
+    */
+    void computeKeptRitz3D(std::vector<ColorSpinorField> &kSpace);
+
+    /**
+       @brief Orthogonalise input vectors r against
+       vector space v using block-BLAS
+       @param[in] v Vector space
+       @param[in] r Vectors to be orthogonalised
+       @param[in] j Use vectors v[0:j]
+       @param[in] s array of
+    */
+    void blockOrthogonalize3D(std::vector<ColorSpinorField> &v, std::vector<ColorSpinorField> &r, int j);
+
+    /**
+       @brief Check for an initial guess. If none present, populate with rands, then
+       orthonormalise
+       @param[in] kSpace The Krylov space vectors
+    */
+    void prepareInitialGuess3D(std::vector<ColorSpinorField> &kSpace, int ortho_dim_size);
+
+    /**
+       @brief Estimate the spectral radius of the operator for the max value of the
+       Chebyshev polynomial
+       @param[in] mat Matrix operator
+       @param[in] out Output spinor
+       @param[in] in Input spinor
+    */
+    double estimateChebyOpMax(ColorSpinorField &out, ColorSpinorField &in) override;
+
+    /**
+       @brief Compute eigenvalues and their residiua
+       @param[in] evecs The eigenvectors
+       @param[in,out] evals The eigenvalues
+       @param[in] size The number of eigenvalues to compute
+    */
+    void computeEvals(std::vector<ColorSpinorField> &evecs, std::vector<Complex> &evals, int size = 0) override;
+  };
+
+  /**
+     @brief Implicitly Restarted Arnoldi Method.
+  */
+  class IRAM : public EigenSolver
+  {
+    std::vector<std::vector<Complex>> upperHess = {};
+    std::vector<std::vector<Complex>> Qmat = {};
+    std::vector<std::vector<Complex>> Rmat = {};
+
+  public:
+    /**
+       @brief Constructor for Thick Restarted Eigensolver class
+       @param eig_param The eigensolver parameters
+       @param mat The operator to solve
+    */
+    IRAM(const DiracMatrix &mat, QudaEigParam *eig_param);
 
     /**
        @return Whether the solver is only for Hermitian systems
@@ -560,9 +650,8 @@ namespace quda
      @param[in] param Parameter container defining the how the matrix
      is to be solved.
      @param[in] eig_param Parameter structure for all QUDA eigensolvers
-     @param[in,out] profile TimeProfile instance used for profiling
   */
   void arpack_solve(std::vector<ColorSpinorField> &h_evecs, std::vector<Complex> &h_evals, const DiracMatrix &mat,
-                    QudaEigParam *eig_param, TimeProfile &profile);
+                    QudaEigParam *eig_param);
 
 } // namespace quda

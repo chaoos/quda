@@ -43,13 +43,18 @@ namespace quda
       }
     }
 
+    XUpdateBatch(const XUpdateBatch &other) = default;
+    XUpdateBatch(XUpdateBatch &&other) = default;
+    XUpdateBatch &operator=(const XUpdateBatch &other) = default;
+    XUpdateBatch &operator=(XUpdateBatch &&other) = default;
+
     /**
        @brief use the vectors currently stored and add to the given output field
        @param x the output field to add to
     */
     void accumulate_x(ColorSpinorField &x)
     {
-      blas::axpy<double>({_alphas.begin(), _alphas.begin() + _j + 1}, {_ps.begin(), _ps.begin() + _j + 1}, x);
+      blas::block::axpy<double>({_alphas.begin(), _alphas.begin() + _j + 1}, {_ps.begin(), _ps.begin() + _j + 1}, x);
     }
 
     /**

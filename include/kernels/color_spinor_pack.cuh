@@ -111,7 +111,7 @@ namespace quda {
                  cvector_ref<const ColorSpinorField> &v) :
       kernel_param(
         dim3(work_items, (a.Nspin() / spins_per_thread(a)) * (a.Ncolor() / colors_per_thread(a)), a.SiteSubset())),
-      n_src(v.size() > 0 ? 1 : v.size()),
+      n_src(v.size() > 0 ? v.size() : 1),
       out(a, nFace, ghost),
       volumeCB(a.VolumeCB()),
       nFace(nFace),
@@ -130,16 +130,19 @@ namespace quda {
       shmem(shmem_)
     {
       int prev = -1; // previous dimension that was partitioned
+
+      int Ls = nDim == 5 ? (a.X(4) / n_src) : 1;
       for (int i = 0; i < 4; i++) {
         if (!comm_dim_partitioned(i)) continue;
         // include fifth dimension but not batch dimension in face indices
-        ghostFaceCB[i] = dc.ghostFaceCB[i] * nFace * ((nDim == 5 && v.size() == 0) ? dc.Ls : 1);
+        ghostFaceCB[i] = dc.ghostFaceCB[i] * nFace * Ls;
         // include fifth and batch dimensions in thread count
-        ghostThreadsCB[i] = dc.ghostFaceCB[i] * nFace * (nDim == 5 ? dc.Ls : 1);
+        ghostThreadsCB[i] = dc.ghostFaceCB[i] * nFace * Ls * n_src;
         threadDimMapLower[i] = (prev >= 0 ? threadDimMapUpper[prev] : 0);
         threadDimMapUpper[i] = threadDimMapLower[i] + 2 * ghostThreadsCB[i];
         prev = i;
       }
+
 #ifdef NVSHMEM_COMMS
       for (int i = 0; i < 4 * QUDA_MAX_DIM; i++) { packBuffer[i] = static_cast<char *>(ghost[i]); }
       for (int dim = 0; dim < 4; dim++) {
@@ -172,17 +175,24 @@ namespace quda {
   };
 
   template <> struct site_max<true> {
+    template <typename Arg> struct CacheDims {
+      static constexpr int Ms = spins_per_thread<true>(Arg::nSpin);
+      static constexpr int Mc = colors_per_thread<true>(Arg::nColor);
+      static constexpr int color_spin_threads = (Arg::nSpin / Ms) * (Arg::nColor / Mc);
+      static constexpr dim3 dims(dim3 block)
+      {
+        // pad the shared block size to avoid bank conflicts for native ordering
+        if (Arg::is_native) block.x = ((block.x + device::warp_size() - 1) / device::warp_size()) * device::warp_size();
+        block.y = color_spin_threads; // state the y block since we know it at compile time
+        return block;
+      }
+    };
+
     template <typename Arg> __device__ inline auto operator()(typename Arg::real thread_max, Arg &)
     {
       using real = typename Arg::real;
-      constexpr int Ms = spins_per_thread<true>(Arg::nSpin);
-      constexpr int Mc = colors_per_thread<true>(Arg::nColor);
-      constexpr int color_spin_threads = (Arg::nSpin/Ms) * (Arg::nColor/Mc);
-      auto block = target::block_dim();
-      // pad the shared block size to avoid bank conflicts for native ordering
-      if (Arg::is_native) block.x = ((block.x + device::warp_size() - 1) / device::warp_size()) * device::warp_size();
-      block.y = color_spin_threads; // state the y block since we know it at compile time
-      SharedMemoryCache<real> cache(block);
+      constexpr int color_spin_threads = CacheDims<Arg>::color_spin_threads;
+      SharedMemoryCache<real, CacheDims<Arg>> cache;
       cache.save(thread_max);
       cache.sync();
       real this_site_max = static_cast<real>(0);

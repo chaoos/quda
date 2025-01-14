@@ -150,14 +150,13 @@ option(QUDA_DIRAC_TWISTED_CLOVER "build twisted clover Dirac operators" ${QUDA_D
 option(QUDA_DIRAC_CLOVER_HASENBUSCH "build clover Hasenbusch twist operators" ${QUDA_DIRAC_DEFAULT})
 option(QUDA_DIRAC_NDEG_TWISTED_MASS "build non-degenerate twisted mass Dirac operators" ${QUDA_DIRAC_DEFAULT})
 option(QUDA_DIRAC_NDEG_TWISTED_CLOVER "build non-degenerate twisted clover Dirac operators" ${QUDA_DIRAC_DEFAULT})
+option(QUDA_DIRAC_LAPLACE "build laplace operator" ${QUDA_DIRAC_DEFAULT})
 
-option(QUDA_CONTRACT "build code for bilinear contraction" OFF)
+option(QUDA_DIRAC_DISTANCE_PRECONDITIONING "build code for distance preconditioned Wilson/clover Dirac operators" OFF)
+
 option(QUDA_COVDEV "build code for covariant derivative" OFF)
 
-option(QUDA_LAPLACE "build laplace operator" OFF)
 option(QUDA_QIO "build QIO code for binary I/O" OFF)
-
-option(QUDA_SMEAR_GAUSS_TWOLINK "build code for two-link Gaussian smearing" OFF)
 
 # Multi-GPU options
 option(QUDA_QMP "build the QMP multi-GPU code" OFF)
@@ -165,7 +164,7 @@ option(QUDA_MPI "build the MPI multi-GPU code" OFF)
 
 # ARPACK
 option(QUDA_ARPACK "build arpack interface" OFF)
-option(QUDA_ARPACK_LOGGING "enable ARPACK logging (not availible for NG)" OFF)
+option(QUDA_ARPACK_LOGGING "enable ARPACK logging (not available for NG)" OFF)
 
 # OpenBLAS
 option(QUDA_OPENBLAS "enable OpenBLAS" OFF)
@@ -218,6 +217,12 @@ if(QUDA_MAX_MULTI_BLAS_N GREATER 32)
   message(SEND_ERROR "Maximum QUDA_MAX_MULTI_BLAS_N is 32.")
 endif()
 
+# For now only we only support register tiles for the staggered dslash operators
+set(QUDA_MAX_MULTI_RHS_TILE "1" CACHE STRING "maximum tile size for MRHS kernels (staggered only)")
+if(QUDA_MAX_MULTI_RHS_TILE GREATER QUDA_MAX_MULTI_RHS)
+  message(SEND_ERROR "QUDA_MAX_MULTI_RHS_TILE is greater than QUDA_MAX_MULTI_RHS")
+endif()
+
 set(QUDA_PRECISION
   "14"
   CACHE STRING "which precisions to instantiate in QUDA (4-bit number - double, single, half, quarter)")
@@ -228,6 +233,8 @@ set(QUDA_RECONSTRUCT
 option(QUDA_CLOVER_DYNAMIC "Dynamically invert the clover term" ON)
 option(QUDA_CLOVER_RECONSTRUCT "set to ON to enable compressed clover storage (requires QUDA_CLOVER_DYNAMIC)" ON)
 option(QUDA_CLOVER_CHOLESKY_PROMOTE "Whether to promote the internal precision when inverting the clover term" ON)
+
+option(QUDA_IMPROVED_STAGGERED_EIGENSOLVER_CTEST "Whether to run eigensolver ctests against the improved staggered operator (requires QUDA_DIRAC_STAGGERED)" OFF)
 
 # Set CTest options
 option(QUDA_CTEST_SEP_DSLASH_POLICIES "Test Dslash policies separately in ctest instead of only autotuning them." OFF)
@@ -274,12 +281,13 @@ mark_as_advanced(QUDA_FAST_COMPILE_DSLASH)
 mark_as_advanced(QUDA_ALTERNATIVE_I_TO_F)
 
 mark_as_advanced(QUDA_MAX_MULTI_BLAS_N)
+mark_as_advanced(QUDA_MAX_MULTI_RHS)
+mark_as_advanced(QUDA_MAX_MULTI_RHS_TILE)
 mark_as_advanced(QUDA_PRECISION)
 mark_as_advanced(QUDA_RECONSTRUCT)
 mark_as_advanced(QUDA_CLOVER_CHOLESKY_PROMOTE)
 mark_as_advanced(QUDA_MULTIGRID_DSLASH_PROMOTE)
 mark_as_advanced(QUDA_CTEST_SEP_DSLASH_POLICIES)
-mark_as_advanced(QUDA_OPENMP)
 
 mark_as_advanced(QUDA_BACKWARDS)
 
@@ -311,10 +319,6 @@ endif()
 
 if(QUDA_NVSHMEM AND NOT (QUDA_QMP OR QUDA_MPI))
   message(SEND_ERROR "Specifying QUDA_NVSHMEM requires either QUDA_QMP or QUDA_MPI.")
-endif()
-
-if(QUDA_SMEAR_GAUSS_TWOLINK AND NOT QUDA_DIRAC_STAGGERED)
-  message(SEND_ERROR "Specifying QUDA_SMEAR_GAUSS_TWOLINK requires QUDA_DIRAC_STAGGERED.")
 endif()
 
 # COMPILER FLAGS Linux: CMAKE_HOST_SYSTEM_PROCESSOR "x86_64" Mac: CMAKE_HOST_SYSTEM_PROCESSOR "x86_64" Power:
@@ -351,7 +355,7 @@ set(CMAKE_CXX_FLAGS_DEBUG
     CACHE STRING "Flags used by the C++ compiler during full (host+device) debug builds.")
 set(CMAKE_CXX_FLAGS_SANITIZE
     "-g -fno-inline \"-fsanitize=address,undefined\""
-    CACHE STRING "Flags used by the C++ compiler during santizer debug builds.")
+    CACHE STRING "Flags used by the C++ compiler during sanitizer debug builds.")
 
 enable_language(CXX)
 
@@ -392,7 +396,11 @@ set(CMAKE_EXE_LINKER_FLAGS_SANITIZE
     CACHE STRING "Flags used by the linker during sanitizer debug builds.")
 
 if(QUDA_CLOVER_RECONSTRUCT AND NOT QUDA_CLOVER_DYNAMIC)
-  message(SEND_ERROR "QUDA_CLOVER_RECONSTRUCT requires QUDA_CLOVER_DYNAMIC)")
+  message(SEND_ERROR "QUDA_CLOVER_RECONSTRUCT requires QUDA_CLOVER_DYNAMIC")
+endif()
+
+if (QUDA_IMPROVED_STAGGERED_EIGENSOLVER_CTEST AND NOT QUDA_DIRAC_STAGGERED)
+  message(SEND_ERROR "QUDA_IMPROVED_STAGGERED_EIGENSOLVER_CTEST requires QUDA_DIRAC_STAGGERED")
 endif()
 
 find_package(Threads REQUIRED)
@@ -420,7 +428,8 @@ if(QUDA_DOWNLOAD_EIGEN)
   CPMAddPackage(
     NAME Eigen
     VERSION ${QUDA_EIGEN_VERSION}
-    URL https://gitlab.com/libeigen/eigen/-/archive/${QUDA_EIGEN_VERSION}/eigen-${QUDA_EIGEN_VERSION}.tar.bz2
+    URL https://gitlab.com/libeigen/eigen/-/archive/e67c494cba7180066e73b9f6234d0b2129f1cdf5.tar.bz2
+    URL_HASH SHA256=98d244932291506b75c4ae7459af29b1112ea3d2f04660686a925d9ef6634583
     DOWNLOAD_ONLY YES
     SYSTEM YES)
   target_include_directories(Eigen SYSTEM INTERFACE ${Eigen_SOURCE_DIR})

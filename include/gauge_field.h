@@ -250,12 +250,12 @@ namespace quda {
     */
     void setTuningString();
 
+  public:
     /**
        @brief Initialize the padded region to 0
      */
     void zeroPad();
 
-  public:
     /**
        @brief Default constructor
     */
@@ -455,7 +455,7 @@ namespace quda {
     std::enable_if_t<std::is_pointer_v<T> && !std::is_pointer_v<typename std::remove_pointer<T>::type>, T> data() const
     {
       if (is_pointer_array(order)) errorQuda("Non dim-array ordered field requested but order is %d", order);
-      return reinterpret_cast<T>(gauge.data());
+      return static_cast<T>(gauge.data());
     }
 
     /**
@@ -473,7 +473,18 @@ namespace quda {
                     "data() requires a pointer cast type");
       if (d >= (unsigned)geometry) errorQuda("Invalid array index %d for geometry %d field", d, geometry);
       if (!is_pointer_array(order)) errorQuda("Dim-array ordered field requested but order is %d", order);
-      return reinterpret_cast<T>(gauge_array[d].data());
+      return static_cast<T>(gauge_array[d].data());
+    }
+
+    void *raw_pointer() const
+    {
+      if (is_pointer_array(order)) {
+        static void *data_array[8];
+        for (int i = 0; i < site_dim; i++) data_array[i] = gauge_array[i].data();
+        return data_array;
+      } else {
+        return gauge.data();
+      }
     }
 
     /**
@@ -489,7 +500,7 @@ namespace quda {
     {
       if (!is_pointer_array(order)) errorQuda("Dim-array ordered field requested but order is %d", order);
       array<T, QUDA_MAX_DIM> u = {};
-      for (auto d = 0; d < geometry; d++) u[d] = static_cast<T>(gauge_array[d]);
+      for (auto d = 0; d < geometry; d++) u[d] = static_cast<T>(gauge_array[d].data());
       return u;
     }
 
@@ -627,8 +638,40 @@ namespace quda {
      */
     static bool are_compatible_weak(const GaugeField &a, const GaugeField &b);
 
+    /**
+     * @brief Helper function that returns the default tolerance used by SU(3) projection
+     * @return The default tolerance, which is ~10x epsilon
+     */
+    double toleranceSU3() const
+    {
+      switch (precision) {
+      case QUDA_DOUBLE_PRECISION: return 2e-15;
+      case QUDA_SINGLE_PRECISION: return 1e-6;
+      default: return 1e-6;
+      }
+    }
+
+    /**
+     * @brief Print the site data
+     * @param[in] parity Parity index
+     * @param[in] dim The dimension in which we are printing
+     * @param[in] x_cb Checkerboard space-time index
+     * @param[in] rank The rank we are requesting from (default is rank = 0)
+     */
+    void PrintMatrix(int dim, int parity, unsigned int x_cb, int rank = 0) const;
+
     friend struct GaugeFieldParam;
   };
+
+  /**
+     @brief Print the value of the field at the requested coordinates
+     @param[in] a The field we are printing from
+     @param[in] dim The dimension in which we are printing
+     @param[in] parity Parity index
+     @param[in] x_cb Checkerboard space-time index
+     @param[in] rank The rank we are requesting from (default is rank = 0)
+  */
+  void genericPrintMatrix(const GaugeField &a, int dim, int parity, unsigned int x_cb, int rank = 0);
 
   /**
      @brief This is a debugging function, where we cast a gauge field
@@ -700,7 +743,7 @@ namespace quda {
      @param recon The reconsturction type
      @return the pointer to the extended gauge field
   */
-  GaugeField *createExtendedGauge(GaugeField &in, const lat_dim_t &R, TimeProfile &profile,
+  GaugeField *createExtendedGauge(const GaugeField &in, const lat_dim_t &R, TimeProfile &profile = getProfile(),
                                   bool redundant_comms = false, QudaReconstructType recon = QUDA_RECONSTRUCT_INVALID);
 
   /**

@@ -17,8 +17,8 @@ endif()
 
 set(QUDA_GPU_ARCH
     ${QUDA_DEFAULT_GPU_ARCH}
-    CACHE STRING "set the GPU architecture (sm_60, sm_70, sm_80)")
-set_property(CACHE QUDA_GPU_ARCH PROPERTY STRINGS sm_60 sm_70 sm_80)
+    CACHE STRING "set the GPU architecture (sm_60, sm_70, sm_80 sm_90)")
+set_property(CACHE QUDA_GPU_ARCH PROPERTY STRINGS sm_60 sm_70 sm_80 sm_90)
 set(QUDA_GPU_ARCH_SUFFIX
     ""
     CACHE STRING "set the GPU architecture suffix (virtual, real). Leave empty for no suffix.")
@@ -64,7 +64,7 @@ mark_as_advanced(CMAKE_CUDA_FLAGS_DEBUG)
 mark_as_advanced(CMAKE_CUDA_FLAGS_HOSTDEBUG)
 mark_as_advanced(CMAKE_CUDA_FLAGS_SANITIZE)
 enable_language(CUDA)
-message(STATUS "CUDA Compiler is" ${CMAKE_CUDA_COMPILER})
+message(STATUS "CUDA Compiler is " ${CMAKE_CUDA_COMPILER})
 message(STATUS "Compiler ID is " ${CMAKE_CUDA_COMPILER_ID})
 # TODO: Do we stil use that?
 if(${CMAKE_CUDA_COMPILER} MATCHES "nvcc")
@@ -79,12 +79,8 @@ elseif(${CMAKE_CUDA_COMPILER_ID} MATCHES "NVHPC")
 endif()
 
 # ######################################################################################################################
-# CUDA specific QUDA options options
+# CUDA specific QUDA options
 include(CMakeDependentOption)
-
-# large arg support requires CUDA 12.1
-cmake_dependent_option(QUDA_LARGE_KERNEL_ARG "enable large kernel arg support" OFF "${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 12.1" OFF )
-mark_as_advanced(QUDA_LARGE_KERNEL_ARG)
 
 option(QUDA_VERBOSE_BUILD "display kernel register usage" OFF)
 option(QUDA_JITIFY "build QUDA using Jitify" OFF)
@@ -107,8 +103,11 @@ if(CMAKE_CUDA_COMPILER_ID MATCHES "NVIDIA" OR CMAKE_CUDA_COMPILER_ID MATCHES "NV
 endif()
 cmake_dependent_option(QUDA_HETEROGENEOUS_ATOMIC "enable heterogeneous atomic support ?" ON
                        "QUDA_HETEROGENEOUS_ATOMIC_SUPPORT" OFF)
+cmake_dependent_option(QUDA_HETEROGENEOUS_ATOMIC_INF_INIT "use infinity as the sentinel for heterogeneous atomic support?" ON
+                       "QUDA_HETEROGENEOUS_ATOMIC_SUPPORT" OFF)
 
 mark_as_advanced(QUDA_HETEROGENEOUS_ATOMIC)
+mark_as_advanced(QUDA_HETEROGENEOUS_ATOMIC_INF_INIT)
 mark_as_advanced(QUDA_JITIFY)
 mark_as_advanced(QUDA_DOWNLOAD_NVSHMEM)
 mark_as_advanced(QUDA_DOWNLOAD_NVSHMEM_TAR)
@@ -129,6 +128,21 @@ else()
 endif()
 
 set_target_properties(quda PROPERTIES CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES})
+
+# large arg support requires CUDA 12.1 and Volta+
+cmake_dependent_option(QUDA_LARGE_KERNEL_ARG "enable large kernel arg support" ON
+  "${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 12.1 AND ${QUDA_COMPUTE_CAPABILITY} GREATER_EQUAL 70"
+  OFF)
+message(STATUS "Large kernel arguments supported: ${QUDA_LARGE_KERNEL_ARG}")
+mark_as_advanced(QUDA_LARGE_KERNEL_ARG)
+
+# Set the maximum multi-RHS per kernel
+if(QUDA_LARGE_KERNEL_ARG)
+  set(QUDA_MAX_MULTI_RHS "64" CACHE STRING "maximum number of simultaneous RHS in a kernel")
+else()
+  set(QUDA_MAX_MULTI_RHS "16" CACHE STRING "maximum number of simultaneous RHS in a kernel")
+endif()
+message(STATUS "Max number of rhs per kernel: ${QUDA_MAX_MULTI_RHS}")
 
 # QUDA_HASH for tunecache
 set(HASH cpu_arch=${CPU_ARCH},gpu_arch=${QUDA_GPU_ARCH},cuda_version=${CMAKE_CUDA_COMPILER_VERSION})
@@ -258,6 +272,7 @@ target_compile_options(
           -Xcompiler=-Wno-unused-function
           -Xcompiler=-Wno-unknown-pragmas
           -Xcompiler=-mllvm\ -unroll-count=4
+          $<$<CONFIG:STRICT>:-Xcompiler=-Wno-pass-failed>
           >
           $<$<CXX_COMPILER_ID:GNU>:
           -Xcompiler=-Wno-unknown-pragmas>
@@ -315,6 +330,14 @@ target_compile_options(
           $<$<CONFIG:SANITIZE>:-fsanitize=address
           -fsanitize=undefined>
           >)
+
+if(QUDA_OPENMP)
+  target_compile_options(
+    quda
+    PRIVATE $<$<COMPILE_LANG_AND_ID:CUDA,NVIDIA>:
+    "-Xcompiler=${OpenMP_CXX_FLAGS}"
+    >)
+endif()
 
 # malloc.cpp uses both the driver and runtime api So we need to find the CUDA_CUDA_LIBRARY (driver api) or the stub
 target_link_libraries(quda PUBLIC CUDA::cuda_driver)
@@ -423,7 +446,9 @@ if(${QUDA_BUILD_NATIVE_LAPACK} STREQUAL "ON")
   target_link_libraries(quda PUBLIC ${CUDA_cublas_LIBRARY})
 endif()
 
-target_link_libraries(quda PUBLIC ${CUDA_cufft_LIBRARY})
+if(${QUDA_BUILD_NATIVE_FFT} STREQUAL "ON")
+  target_link_libraries(quda PUBLIC ${CUDA_cufft_LIBRARY})
+endif()
 
 if(QUDA_JITIFY)
   target_compile_definitions(quda PRIVATE JITIFY)

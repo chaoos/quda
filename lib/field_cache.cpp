@@ -17,6 +17,10 @@ namespace quda {
       param.create = QUDA_ZERO_FIELD_CREATE;
       tmp = T(param);
     }
+
+    if constexpr (std::is_same_v<T, ColorSpinorField>) {
+      tmp.GammaBasis(a.GammaBasis()); // ensure gamma basis matches
+    }
   }
 
   template <typename T> FieldTmp<T>::FieldTmp(const FieldKey<T> &key, const typename T::param_type &param) : key(key)
@@ -27,6 +31,21 @@ namespace quda {
       tmp = std::move(it->second.top());
       it->second.pop(); // pop the defunct object
     } else {            // no entry found, we must allocate a new field
+      tmp = T(param);
+    }
+  }
+
+  template <typename T> FieldTmp<T>::FieldTmp(typename T::param_type param)
+  {
+    param.create = QUDA_REFERENCE_FIELD_CREATE;
+    key = FieldKey(T(param));
+
+    auto it = cache.find(key);
+    if (it != cache.end() && it->second.size()) { // found an entry
+      tmp = std::move(it->second.top());
+      it->second.pop(); // pop the defunct object
+    } else {            // no entry found, we must allocate a new field
+      param.create = QUDA_ZERO_FIELD_CREATE;
       tmp = T(param);
     }
   }

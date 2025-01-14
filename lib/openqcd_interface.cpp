@@ -192,9 +192,6 @@ std::unordered_map<std::string, std::string> enum_map
      {"QUDA_VERBOSE", std::to_string(QUDA_VERBOSE)},
      {"QUDA_DEBUG_VERBOSE", std::to_string(QUDA_DEBUG_VERBOSE)},
      {"QUDA_INVALID_VERBOSITY", std::to_string(QUDA_INVALID_VERBOSITY)},
-     {"QUDA_TUNE_NO", std::to_string(QUDA_TUNE_NO)},
-     {"QUDA_TUNE_YES", std::to_string(QUDA_TUNE_YES)},
-     {"QUDA_TUNE_INVALID", std::to_string(QUDA_TUNE_INVALID)},
      {"QUDA_POWER_BASIS", std::to_string(QUDA_POWER_BASIS)},
      {"QUDA_CHEBYSHEV_BASIS", std::to_string(QUDA_CHEBYSHEV_BASIS)},
      {"QUDA_INVALID_BASIS", std::to_string(QUDA_INVALID_BASIS)},
@@ -660,6 +657,7 @@ static QudaInvertParam newOpenQCDDiracParam(openQCD_QudaDiracParam_t p)
   param.kappa = p.kappa;
   param.mu = p.mu;
   param.dagger = QUDA_DAG_NO;
+  param.matpc_type = QUDA_MATPC_EVEN_EVEN;
 
   set_su3csw(&param, p.su3csw);
 
@@ -1209,8 +1207,8 @@ void *openQCD_qudaSolverReadIn(int id)
     param->tol_hq = kv.get<double>(section, "tol_hq", param->tol_hq);
 
     param->compute_true_res = kv.get<int>(section, "compute_true_res", param->compute_true_res);
-    param->true_res = kv.get<double>(section, "true_res", param->true_res);
-    param->true_res_hq = kv.get<double>(section, "true_res_hq", param->true_res_hq);
+    param->true_res[0] = kv.get<double>(section, "true_res", param->true_res[0]); /* TODO: mrhs */
+    param->true_res_hq[0] = kv.get<double>(section, "true_res_hq", param->true_res_hq[0]);
     param->maxiter = kv.get<int>(section, "maxiter", param->maxiter);
     param->reliable_delta = kv.get<double>(section, "reliable_delta", param->reliable_delta);
     param->reliable_delta_refinement
@@ -1290,7 +1288,6 @@ void *openQCD_qudaSolverReadIn(int id)
     param->clover_coeff = kv.get<double>(section, "clover_coeff", param->clover_coeff);
     param->clover_rho = kv.get<double>(section, "clover_rho", param->clover_rho);
     param->compute_clover_trlog = kv.get<int>(section, "compute_clover_trlog", param->compute_clover_trlog);
-    param->tune = kv.get<QudaTune>(section, "tune", param->tune);
     param->Nsteps = kv.get<int>(section, "Nsteps", param->Nsteps);
     param->gcrNkrylov = kv.get<int>(section, "gcrNkrylov", param->gcrNkrylov);
 
@@ -1399,6 +1396,7 @@ void *openQCD_qudaSolverReadIn(int id)
         multigrid_param->spin_block_size[i]
           = kv.get<int>(subsection, "spin_block_size", multigrid_param->spin_block_size[i]);
         multigrid_param->n_vec[i] = kv.get<int>(subsection, "n_vec", multigrid_param->n_vec[i]);
+        multigrid_param->n_vec_batch[i] = kv.get<int>(subsection, "n_vec_batch", 1);
         multigrid_param->precision_null[i]
           = kv.get<QudaPrecision>(subsection, "precision_null", multigrid_param->precision_null[i]);
         multigrid_param->n_block_ortho[i] = kv.get<int>(subsection, "n_block_ortho", multigrid_param->n_block_ortho[i]);
@@ -1709,17 +1707,17 @@ double openQCD_qudaInvert(int id, double mu, void *source, void *solution, int *
   invertQuda(static_cast<char *>(solution), static_cast<char *>(source), param);
   POP_RANGE;
 
-  *status = param->true_res <= param->tol ? param->iter : -1;
+  *status = param->true_res[0] <= param->tol ? param->iter : -1;
 
   logQuda(QUDA_VERBOSE, "openQCD_qudaInvert()\n");
-  logQuda(QUDA_VERBOSE, "  true_res    = %.2e\n", param->true_res);
-  logQuda(QUDA_VERBOSE, "  true_res_hq = %.2e\n", param->true_res_hq);
+  logQuda(QUDA_VERBOSE, "  true_res    = %.2e\n", param->true_res[0]);
+  logQuda(QUDA_VERBOSE, "  true_res_hq = %.2e\n", param->true_res_hq[0]);
   logQuda(QUDA_VERBOSE, "  iter        = %d\n", param->iter);
   logQuda(QUDA_VERBOSE, "  gflops      = %.2e\n", param->gflops);
   logQuda(QUDA_VERBOSE, "  secs        = %.2e\n", param->secs);
   logQuda(QUDA_VERBOSE, "  status      = %d\n", *status);
 
-  return param->true_res;
+  return param->true_res[0];
 }
 
 void openQCD_qudaSolverDestroy(int id)

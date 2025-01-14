@@ -6,6 +6,12 @@
 namespace quda
 {
 
+  /**
+     @brief Element type used for coalesced storage.
+   */
+  template <typename T>
+  using atom_t = std::conditional_t<sizeof(T) % 16 == 0, int4, std::conditional_t<sizeof(T) % 8 == 0, int2, int>>;
+
   // pre-declaration of vector_load that we wish to specialize
   template <bool> struct vector_load_impl;
 
@@ -14,6 +20,21 @@ namespace quda
     template <typename T> __device__ inline void operator()(T &value, const void *ptr, int idx)
     {
       value = reinterpret_cast<const T *>(ptr)[idx];
+    }
+
+    __device__ inline void operator()(float4 &value, const void *ptr, int idx)
+    {
+      load_cached_float4(value, reinterpret_cast<const float4 *>(ptr) + idx);
+    }
+
+    __device__ inline void operator()(float2 &value, const void *ptr, int idx)
+    {
+      load_cached_float2(value, reinterpret_cast<const float2 *>(ptr) + idx);
+    }
+
+    __device__ inline void operator()(double2 &value, const void *ptr, int idx)
+    {
+      load_cached_double2(value, reinterpret_cast<const double2 *>(ptr) + idx);
     }
 
     __device__ inline void operator()(short8 &value, const void *ptr, int idx)

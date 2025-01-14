@@ -175,6 +175,7 @@ void printQudaEigParam(QudaEigParam *param) {
   P(preserve_deflation, QUDA_BOOLEAN_FALSE);
   P(preserve_deflation_space, 0);
   P(preserve_evals, QUDA_BOOLEAN_TRUE);
+  P(use_smeared_gauge, false);
   P(use_dagger, QUDA_BOOLEAN_FALSE);
   P(use_norm_op, QUDA_BOOLEAN_FALSE);
   P(compute_svd, QUDA_BOOLEAN_FALSE);
@@ -196,6 +197,7 @@ void printQudaEigParam(QudaEigParam *param) {
   P(eig_type, QUDA_EIG_TR_LANCZOS);
   P(extlib_type, QUDA_EIGEN_EXTLIB);
   P(mem_type_ritz, QUDA_MEMORY_DEVICE);
+  P(compute_evals_batch_size, 4);
   P(ortho_block_size, 0);
   P(partfile, QUDA_BOOLEAN_FALSE);
 #else
@@ -227,6 +229,7 @@ void printQudaEigParam(QudaEigParam *param) {
   P(eig_type, QUDA_EIG_INVALID);
   P(extlib_type, QUDA_EXTLIB_INVALID);
   P(mem_type_ritz, QUDA_MEMORY_INVALID);
+  P(compute_evals_batch_size, INVALID_INT);
   P(ortho_block_size, INVALID_INT);
   P(partfile, QUDA_BOOLEAN_INVALID);
 #endif
@@ -366,9 +369,11 @@ void printQudaInvertParam(QudaInvertParam *param) {
   P(Ls, INVALID_INT);
   P(mu, INVALID_DOUBLE);
   P(epsilon, INVALID_DOUBLE);
+  P(evmax, INVALID_DOUBLE);
   P(tm_rho, 0.0);
   P(twist_flavor, QUDA_TWIST_INVALID);
   P(laplace3D, INVALID_INT);
+  P(covdev_mu, INVALID_INT);
 #else
   // asqtad and domain wall use mass parameterization
   if (param->dslash_type == QUDA_STAGGERED_DSLASH || param->dslash_type == QUDA_ASQTAD_DSLASH
@@ -383,6 +388,19 @@ void printQudaInvertParam(QudaInvertParam *param) {
       param->dslash_type == QUDA_MOBIUS_DWF_DSLASH ) {
     P(m5, INVALID_DOUBLE);
     P(Ls, INVALID_INT);
+#ifdef PRINT_PARAM
+    // for MDWF, add b5, c5 to param print
+    for (int i = 0; i < param->Ls; i++) {
+      std::complex<double> b5;
+      memcpy(&b5, param->b_5, sizeof(std::complex<double>));
+      printfQuda("s = %2d b5 = (%16.15e %16.15e)\n", i, b5.real(), b5.imag());
+    }
+    for (int i = 0; i < param->Ls; i++) {
+      std::complex<double> c5;
+      memcpy(&c5, param->c_5, sizeof(std::complex<double>));
+      printfQuda("s = %2d c5 = (%16.15e %16.15e)\n", i, c5.real(), c5.imag());
+    }
+#endif
   }
   if (param->dslash_type == QUDA_TWISTED_MASS_DSLASH || param->dslash_type == QUDA_TWISTED_CLOVER_DSLASH) {
     P(mu, INVALID_DOUBLE);
@@ -390,6 +408,7 @@ void printQudaInvertParam(QudaInvertParam *param) {
   }
   if (param->dslash_type == QUDA_TWISTED_CLOVER_DSLASH) { P(tm_rho, INVALID_DOUBLE); }
   if (param->twist_flavor == QUDA_TWIST_NONDEG_DOUBLET) { P(epsilon, INVALID_DOUBLE); }
+  if (param->dslash_type == QUDA_COVDEV_DSLASH) { P(covdev_mu, INVALID_INT); }
 #endif
 
   P(tol, INVALID_DOUBLE);
@@ -435,8 +454,11 @@ void printQudaInvertParam(QudaInvertParam *param) {
 #ifndef CHECK_PARAM
   P(pipeline, 0); /** Whether to use a pipelined solver */
   P(num_offset, 0); /**< Number of offsets in the multi-shift solver */
-  P(num_src, 1); /**< Number of offsets in the multi-shift solver */
+  P(num_src, 1);    /**< Number of sources to solve for simultaneously */
   P(overlap, 0); /**< width of domain overlaps */
+#else
+  if (param->num_src > QUDA_MAX_MULTI_SRC)
+    errorQuda("num_src %d exceeds limit of %d", param->num_src, QUDA_MAX_MULTI_SRC);
 #endif
 
 #ifdef INIT_PARAM
@@ -445,6 +467,17 @@ void printQudaInvertParam(QudaInvertParam *param) {
 #else
   for (int d = 0; d < 4; d++) { P(split_grid[d], INVALID_INT); } /**< Grid of sub-partitions */
   P(num_src_per_sub_partition, INVALID_INT);                     /**< Number of sources per sub-partitions */
+#ifdef CHECK_PARAM
+  int split_grid_size = 1;
+  for (int d = 0; d < 4; d++) split_grid_size *= param->split_grid[d];
+  if (split_grid_size > 1) {
+    if (param->num_src_per_sub_partition < 1)
+      errorQuda("Invalid num_src_per_subpartition = %d", param->num_src_per_sub_partition);
+    if (param->num_src % param->num_src_per_sub_partition != 0)
+      errorQuda("num_src %d not compatible with num_src_per_sub_partition %d", param->num_src,
+                param->num_src_per_sub_partition);
+  }
+#endif
 #endif
 
 #ifdef INIT_PARAM
@@ -519,12 +552,12 @@ void printQudaInvertParam(QudaInvertParam *param) {
 #ifdef CHECK_PARAM
   if (in_ptr && quda::get_pointer_location(in_ptr) != param->input_location) {
     warningQuda("input_location=%d, however supplied pointer is location=%d", param->input_location, quda::get_pointer_location(in_ptr));
-    param->input_location = quda::get_pointer_location(in_ptr);
+    // param->input_location = quda::get_pointer_location(in_ptr);
   }
 
   if (out_ptr && quda::get_pointer_location(out_ptr) != param->output_location) {
     warningQuda("output_location=%d, however supplied pointer is location=%d", param->output_location, quda::get_pointer_location(out_ptr));
-    param->output_location = quda::get_pointer_location(out_ptr);
+    // param->output_location = quda::get_pointer_location(out_ptr);
   }
 #endif
 
@@ -547,6 +580,7 @@ void printQudaInvertParam(QudaInvertParam *param) {
   // domain decomposition parameters
   //P(inv_type_sloppy, QUDA_INVALID_INVERTER); // disable since invalid means no preconditioner
 #if defined INIT_PARAM
+  P(dslash_type_precondition, QUDA_INVALID_DSLASH);
   P(inv_type_precondition, QUDA_INVALID_INVERTER);
   P(preconditioner, 0);
   P(tol_precondition, INVALID_DOUBLE);
@@ -644,10 +678,18 @@ void printQudaInvertParam(QudaInvertParam *param) {
   P(iter, 0);
   P(gflops, 0.0);
   P(secs, 0.0);
+  P(energy, 0.0);
+  P(power, 0.0);
+  P(temp, 0.0);
+  P(clock, 0.0);
 #elif defined(PRINT_PARAM)
   P(iter, INVALID_INT);
   P(gflops, INVALID_DOUBLE);
   P(secs, INVALID_DOUBLE);
+  P(energy, INVALID_DOUBLE);
+  P(power, INVALID_DOUBLE);
+  P(temp, INVALID_DOUBLE);
+  P(clock, INVALID_DOUBLE);
 #endif
 
 
@@ -730,10 +772,46 @@ void printQudaInvertParam(QudaInvertParam *param) {
 
 #ifdef INIT_PARAM
   P(additional_prop, 0);
+  P(distance_pc_alpha0, 0.0);
+  P(distance_pc_t0, -1);
+#else
+  P(distance_pc_alpha0, INVALID_DOUBLE);
+  P(distance_pc_t0, INVALID_INT);
 #endif
 
 #ifdef INIT_PARAM
   return ret;
+#endif
+
+#ifdef CHECK_PARAM
+  // additional sanity checks here
+  bool pc_solution
+    = (param->solution_type == QUDA_MATPC_SOLUTION) || (param->solution_type == QUDA_MATPCDAG_MATPC_SOLUTION);
+  bool pc_solve = (param->solve_type == QUDA_DIRECT_PC_SOLVE) || (param->solve_type == QUDA_NORMOP_PC_SOLVE)
+    || (param->solve_type == QUDA_NORMERR_PC_SOLVE);
+  bool mat_solution = (param->solution_type == QUDA_MAT_SOLUTION) || (param->solution_type == QUDA_MATPC_SOLUTION);
+  bool direct_solve = (param->solve_type == QUDA_DIRECT_SOLVE) || (param->solve_type == QUDA_DIRECT_PC_SOLVE);
+  bool norm_error_solve = (param->solve_type == QUDA_NORMERR_SOLVE) || (param->solve_type == QUDA_NORMERR_PC_SOLVE);
+
+  if (pc_solution && !pc_solve) { errorQuda("Preconditioned (PC) solution_type requires a PC solve_type"); }
+
+  if (!mat_solution && !pc_solution && pc_solve) {
+    errorQuda("Unpreconditioned MATDAG_MAT solution_type requires an unpreconditioned solve_type");
+  }
+
+  if (!mat_solution && norm_error_solve) { errorQuda("Normal-error solve requires Mat solution"); }
+
+  if (param->inv_type_precondition == QUDA_MG_INVERTER && (!direct_solve || !mat_solution)) {
+    errorQuda("Multigrid preconditioning only supported for direct solves");
+  }
+
+  if (param->chrono_use_resident && (norm_error_solve)) {
+    errorQuda("Chronological forcasting only presently supported for M^dagger M solver");
+  }
+
+  if (param->chrono_make_resident && param->chrono_max_dim < 1) {
+    errorQuda("Cannot chrono_make_resident with chrono_max_dim %i", param->chrono_max_dim);
+  }
 #endif
 }
 
@@ -902,12 +980,14 @@ void printQudaMultigridParam(QudaMultigridParam *param) {
 #endif
 
 #ifdef INIT_PARAM
-    if (i<QUDA_MAX_MG_LEVEL) {
-          P(n_vec[i], INVALID_INT);
+    if (i < QUDA_MAX_MG_LEVEL) {
+      P(n_vec[i], INVALID_INT);
+      P(n_vec_batch[i], INVALID_INT);
     }
 #else
-    if (i<n_level-1) {
+    if (i < n_level-1) {
       P(n_vec[i], INVALID_INT);
+      P(n_vec_batch[i], INVALID_INT);
     }
 #endif
 
@@ -989,14 +1069,6 @@ void printQudaMultigridParam(QudaMultigridParam *param) {
     P(vec_store[i], QUDA_BOOLEAN_INVALID);
 #endif
   }
-
-#ifdef INIT_PARAM
-  P(gflops, 0.0);
-  P(secs, 0.0);
-#elif defined(PRINT_PARAM)
-  P(gflops, INVALID_DOUBLE);
-  P(secs, INVALID_DOUBLE);
-#endif
 
 #ifdef INIT_PARAM
   P(allow_truncation, QUDA_BOOLEAN_FALSE);
@@ -1105,12 +1177,24 @@ void printQudaGaugeSmearParam(QudaGaugeSmearParam *param)
   P(alpha, 0.0);
   P(rho, 0.0);
   P(epsilon, 0.0);
+  P(restart, QUDA_BOOLEAN_FALSE);
+  P(t0, 0.0);
+  P(alpha1, 0.0);
+  P(alpha2, 0.0);
+  P(alpha3, 0.0);
+  P(dir_ignore, -1);
 #else
   P(n_steps, (unsigned int)INVALID_INT);
   P(meas_interval, (unsigned int)INVALID_INT);
   P(alpha, INVALID_DOUBLE);
   P(rho, INVALID_DOUBLE);
   P(epsilon, INVALID_DOUBLE);
+  P(restart, QUDA_BOOLEAN_INVALID);
+  P(t0, INVALID_DOUBLE);
+  P(alpha1, INVALID_DOUBLE);
+  P(alpha2, INVALID_DOUBLE);
+  P(alpha3, INVALID_DOUBLE);
+  P(dir_ignore, INVALID_INT);
 #endif
 
 #ifdef INIT_PARAM
