@@ -1005,7 +1005,7 @@ extern "C" {
    * initQuda.  Calling initQudaMemory requires that the user has
    * previously called initQudaDevice.
    */
-  void initQudaMemory();
+  void initQudaMemory(void);
 
   /**
    * Initialize the library.  This function is actually a wrapper
@@ -1028,7 +1028,7 @@ extern "C" {
    * @details This should only be needed for automated testing when
    * different partitioning is applied within a single run.
    */
-  void updateR();
+  void updateR(void);
 
   /**
    * A new QudaGaugeParam should always be initialized immediately
