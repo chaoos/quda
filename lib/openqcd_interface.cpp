@@ -1349,8 +1349,6 @@ void *openQCD_qudaSolverReadIn(int id)
         = kv.get<QudaBoolean>(mg_section, "pre_orthonormalize", multigrid_param->pre_orthonormalize);
       multigrid_param->post_orthonormalize
         = kv.get<QudaBoolean>(mg_section, "post_orthonormalize", multigrid_param->post_orthonormalize);
-      multigrid_param->setup_minimize_memory
-        = kv.get<QudaBoolean>(mg_section, "setup_minimize_memory", multigrid_param->setup_minimize_memory);
       multigrid_param->compute_null_vector
         = kv.get<QudaComputeNullVector>(mg_section, "compute_null_vector", multigrid_param->compute_null_vector);
       multigrid_param->generate_all_levels
