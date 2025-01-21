@@ -1383,14 +1383,6 @@ void *openQCD_qudaSolverReadIn(int id)
           = kv.get<int>(subsection, "geo_block_size[3]", multigrid_param->geo_block_size[i][2]);
         multigrid_param->geo_block_size[i][3]
           = kv.get<int>(subsection, "geo_block_size[0]", multigrid_param->geo_block_size[i][3]);
-
-        if (i == 0) {
-          multigrid_param->geo_block_size[i][0] = 4;
-          multigrid_param->geo_block_size[i][1] = 4;
-          multigrid_param->geo_block_size[i][2] = 4;
-          multigrid_param->geo_block_size[i][3] = 4;
-        }
-
         multigrid_param->spin_block_size[i]
           = kv.get<int>(subsection, "spin_block_size", multigrid_param->spin_block_size[i]);
         multigrid_param->n_vec[i] = kv.get<int>(subsection, "n_vec", multigrid_param->n_vec[i]);
