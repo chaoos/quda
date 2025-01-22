@@ -212,7 +212,6 @@ typedef enum QudaCABasis_s {
   QUDA_INVALID_BASIS = QUDA_INVALID_ENUM
 } QudaCABasis;
 
-//
 // Whether the preconditioned matrix is (1-k^2 Deo Doe) or (1-k^2 Doe Deo)
 //
 // For the clover-improved Wilson Dirac operator, QUDA_MATPC_EVEN_EVEN
