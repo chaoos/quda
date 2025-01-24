@@ -23,6 +23,7 @@
 #define QUDA_MOMENTUM_LINKS 3
 #define QUDA_COARSE_LINKS   4
 #define QUDA_SMEARED_LINKS  5
+#define QUDA_TWOLINK_LINKS 6
 
 #define QUDA_WILSON_LINKS         QUDA_SU3_LINKS
 #define QUDA_ASQTAD_FAT_LINKS     QUDA_GENERAL_LINKS
@@ -121,8 +122,9 @@
 #define QudaEigType integer(4)
 #define QUDA_EIG_TR_LANCZOS 0 // Thick Restarted Lanczos Solver
 #define QUDA_EIG_BLK_IR_LANCZOS 1 // Block Thick Restarted Lanczos Solver
-#define QUDA_EIG_IR_ARNOLDI 2 // Implicitly restarted Arnoldi solver
-#define QUDA_EIG_BLK_IR_ARNOLDI 3 // Block Implicitly restarted Arnoldi solver (not yet implemented)
+#define QUDA_EIG_TR_LANCZOS_3D 2  // Thick Restarted Lanczos Solver for 3-d systems
+#define QUDA_EIG_IR_ARNOLDI 3     // Implicitly restarted Arnoldi solver
+#define QUDA_EIG_BLK_IR_ARNOLDI 4 // Block Implicitly restarted Arnoldi solver (not yet implemented)
 #define QUDA_EIG_INVALID QUDA_INVALID_ENUM
 
 #define QudaEigSpectrumType integer(4)
@@ -246,11 +248,6 @@
 #define QUDA_DEBUG_VERBOSE 3
 #define QUDA_INVALID_VERBOSITY QUDA_INVALID_ENUM
 
-#define QudaTune integer(4)
-#define QUDA_TUNE_NO 0
-#define QUDA_TUNE_YES 1
-#define QUDA_TUNE_INVALID QUDA_INVALID_ENUM
-
 #define QudaPreserveDirac integer(4)
 #define QUDA_PRESERVE_DIRAC_NO 0
 #define QUDA_PRESERVE_DIRAC_YES 1
@@ -341,6 +338,7 @@
 #define QUDA_DEGRAND_ROSSI_GAMMA_BASIS 0
 #define QUDA_UKQCD_GAMMA_BASIS 1
 #define QUDA_CHIRAL_GAMMA_BASIS 2
+#define QUDA_DIRAC_PAULI_GAMMA_BASIS 3
 #define QUDA_INVALID_GAMMA_BASIS QUDA_INVALID_ENUM
 
 #define QudaSourceType integer(4)
@@ -476,10 +474,37 @@
 #define QUDA_STAGGERED_PHASE_TIFR   3
 #define QUDA_STAGGERED_PHASE_INVALID QUDA_INVALID_ENUM
 
+#define QudaSpinTasteGamma integer(4)
+#define QUDA_SPIN_TASTE_G1 0
+#define QUDA_SPIN_TASTE_GX 1
+#define QUDA_SPIN_TASTE_GY 2
+#define QUDA_SPIN_TASTE_GZ 4
+#define QUDA_SPIN_TASTE_GT 8
+#define QUDA_SPIN_TASTE_G5 15
+#define QUDA_SPIN_TASTE_GYGZ 6
+#define QUDA_SPIN_TASTE_GZGX 5
+#define QUDA_SPIN_TASTE_GXGY 3
+#define QUDA_SPIN_TASTE_GXGT 9
+#define QUDA_SPIN_TASTE_GYGT 10
+#define QUDA_SPIN_TASTE_GZGT 12
+#define QUDA_SPIN_TASTE_G5GX 14
+#define QUDA_SPIN_TASTE_G5GY 13
+#define QUDA_SPIN_TASTE_G5GZ 11
+#define QUDA_SPIN_TASTE_G5GT 7
+#define QUDA_SPIN_TASTE_INVALID QUDA_INVALID_ENUM
+
 #define QudaContractType integer(4)
-#define QUDA_CONTRACT_TYPE_OPEN ,
-#define QUDA_CONTRACT_TYPE_DR ,
-#define QUDA_CONTRACT_TYPE_INVALID = QUDA_INVALID_ENUM
+#define QUDA_CONTRACT_TYPE_STAGGERED_FT_T 0
+#define QUDA_CONTRACT_TYPE_DR_FT_T 1
+#define QUDA_CONTRACT_TYPE_DR_FT_Z 2
+#define QUDA_CONTRACT_TYPE_STAGGERED 3
+#define QUDA_CONTRACT_TYPE_DR 4
+#define QUDA_CONTRACT_TYPE_OPEN 5
+#define QUDA_CONTRACT_TYPE_OPEN_SUM_T 6
+#define QUDA_CONTRACT_TYPE_OPEN_SUM_Z 7
+#define QUDA_CONTRACT_TYPE_OPEN_FT_T 8
+#define QUDA_CONTRACT_TYPE_OPEN_FT_Z 9
+#define QUDA_CONTRACT_TYPE_INVALID QUDA_INVALID_ENUM
 
 #define QudaContractGamma integer(4)
 #define QUDA_CONTRACT_GAMMA_I 0

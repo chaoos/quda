@@ -40,10 +40,20 @@ extern QudaPrecision &cuda_prec_eigensolver;
 extern QudaPrecision &cuda_prec_refinement_sloppy;
 extern QudaPrecision &cuda_prec_ritz;
 
+// Determine if we're running in multi-GPU mode
+constexpr bool is_multi_gpu()
+{
+#ifdef MULTI_GPU
+  return true;
+#else
+  return false;
+#endif
+}
+
 // Determine if the Laplace operator has been defined
 constexpr bool is_enabled_laplace()
 {
-#ifdef QUDA_LAPLACE
+#ifdef QUDA_DIRAC_LAPLACE
   return true;
 #else
   return false;
@@ -115,6 +125,9 @@ template <typename Float> void applyGaugeFieldScaling(Float **gauge, int Vh, Qud
 //------------------------------------------------------
 void constructWilsonTestSpinorParam(quda::ColorSpinorParam *csParam, const QudaInvertParam *inv_param,
                                     const QudaGaugeParam *gauge_param);
+void constructPointSpinorSource(void *v, QudaPrecision precision, const int *const x, const int dil,
+                                const int *const src);
+void constructWallSpinorSource(void *v, int nSpin, int nColor, QudaPrecision precision, const int dil);
 void constructRandomSpinorSource(void *v, int nSpin, int nColor, QudaPrecision precision, QudaSolutionType sol_type,
                                  const int *const x, int nDim, quda::RNG &rng);
 //------------------------------------------------------
@@ -159,12 +172,6 @@ int index_4d_cb_from_coordinate_4d(const int coordinate[4], const int dim[4]);
 void coordinate_from_shrinked_index(int coordinate[4], int shrinked_index, const int shrinked_dim[4],
                                     const int shift[4], int parity);
 
-int neighborIndex(int i, int oddBit, int dx4, int dx3, int dx2, int dx1);
-int neighborIndexFullLattice(int i, int dx4, int dx3, int dx2, int dx1);
-
-int neighborIndex(int dim[4], int index, int oddBit, int dx[4]);
-int neighborIndexFullLattice(int dim[4], int index, int dx[4]);
-
 int neighborIndex_mg(int i, int oddBit, int dx4, int dx3, int dx2, int dx1);
 int neighborIndexFullLattice_mg(int i, int dx4, int dx3, int dx2, int dx1);
 
@@ -172,8 +179,6 @@ void printSpinorElement(void *spinor, int X, QudaPrecision precision);
 void printGaugeElement(void *gauge, int X, QudaPrecision precision);
 template <typename Float> void printVector(Float *v);
 
-int fullLatticeIndex(int i, int oddBit);
-int fullLatticeIndex(int dim[4], int index, int oddBit);
 int getOddBit(int X);
 
 // Custom "sitelink" enum used to create unphased, MILC phased, or continuous U(1) phased links
@@ -245,16 +250,16 @@ void exchange_llfat_init(QudaPrecision prec);
 void exchange_llfat_cleanup(void);
 
 // Implemented in host_blas.cpp
-double norm_2(void *vector, int len, QudaPrecision precision);
+double norm_2(void *vector, int len, QudaPrecision precision, bool global = true);
 void mxpy(void *x, void *y, int len, QudaPrecision precision);
 void ax(double a, void *x, int len, QudaPrecision precision);
 void cax(double _Complex a, void *x, int len, QudaPrecision precision);
-void axpy(double a, void *x, void *y, int len, QudaPrecision precision);
+void axpy(double a, const void *x, void *y, int len, QudaPrecision precision);
 void caxpy(double _Complex a, void *x, void *y, int len, QudaPrecision precision);
-void xpay(void *x, double a, void *y, int len, QudaPrecision precision);
+void xpay(const void *x, double a, void *y, int len, QudaPrecision precision);
 void cxpay(void *x, double _Complex a, void *y, int len, QudaPrecision precision);
-void cpu_axy(QudaPrecision prec, double a, void *x, void *y, int size);
-void cpu_xpy(QudaPrecision prec, void *x, void *y, int size);
+void cpu_axy(QudaPrecision prec, double a, const void *x, void *y, int size);
+void cpu_xpy(QudaPrecision prec, const void *x, void *y, int size);
 
 inline QudaPrecision getPrecision(int i)
 {
@@ -343,3 +348,7 @@ void setStaggeredMGInvertParam(QudaInvertParam &inv_param);
 void setGaugeParam(QudaGaugeParam &gauge_param);
 void setWilsonGaugeParam(QudaGaugeParam &gauge_param);
 void setStaggeredGaugeParam(QudaGaugeParam &gauge_param);
+
+// Smear param types
+void setGaugeSmearParam(QudaGaugeSmearParam &smear_param);
+void setFermionSmearParam(QudaInvertParam &inv_param, double omega, int steps);

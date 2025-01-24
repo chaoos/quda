@@ -130,7 +130,7 @@ namespace quda {
 
        std::vector<ColorSpinorField *> v_(v->Components().begin(), v->Components().begin() + 2 * k);
 
-       blas::cDotProduct(s.get(), w_, v_);
+       blas::legacy::cDotProduct(s.get(), w_, v_);
 
        Map<VectorXcd, Unaligned> s_(s.get(), 2 * k);
        s_ *= inv_sqrt_r2;
@@ -290,7 +290,7 @@ namespace quda {
     std::vector<ColorSpinorField*> v2k(args.V2k->Components());
 
     RowMajorDenseMatrix Alpha(args.ritzVecs.topLeftCorner(args.m, 2*args.k));
-    blas::caxpy( static_cast<Complex*>(Alpha.data()), vm , v2k);
+    blas::legacy::caxpy(static_cast<Complex *>(Alpha.data()), vm, v2k);
 
     for(int i = 0; i < 2*args.k; i++)  blas::copy(Vm->Component(i), args.V2k->Component(i));
 
@@ -335,7 +335,8 @@ namespace quda {
 /*
  * This is a solo precision solver.
 */
-  int IncEigCG::eigCGsolve(ColorSpinorField &x, ColorSpinorField &b) {
+  int IncEigCG::eigCGsolve(ColorSpinorField &x, const ColorSpinorField &b)
+  {
 
     int k=0;
 
@@ -358,7 +359,7 @@ namespace quda {
       eigcg_args = new EigCGArgs(param.m, param.n_ev); // need only deflation meta structure
 
       csParam.create = QUDA_COPY_FIELD_CREATE;
-      csParam.field = &b;
+      csParam.field = &const_cast<ColorSpinorField &>(b);
       rp = ColorSpinorField::Create(csParam);
       csParam.create = QUDA_ZERO_FIELD_CREATE;
       yp = ColorSpinorField::Create(csParam);
@@ -525,7 +526,8 @@ namespace quda {
     return k;
   }
 
-  int IncEigCG::initCGsolve(ColorSpinorField &x, ColorSpinorField &b) {
+  int IncEigCG::initCGsolve(ColorSpinorField &x, const ColorSpinorField &b)
+  {
     int k = 0;
     //Start init CG iterations:
     deflated_solver *defl_p = static_cast<deflated_solver*>(param.deflation_op);
@@ -586,7 +588,7 @@ namespace quda {
     return k;
   }
 
-  void IncEigCG::operator()(ColorSpinorField &out, ColorSpinorField &in)
+  void IncEigCG::operator()(ColorSpinorField &out, const ColorSpinorField &in)
   {
      if(param.rhs_idx == 0) max_eigcg_cycles = param.eigcg_max_restarts;
 

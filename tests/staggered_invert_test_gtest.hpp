@@ -54,11 +54,15 @@ bool skip_test(test_t param)
     if (solution_type == QUDA_MAT_SOLUTION && solve_type == QUDA_DIRECT_SOLVE && inverter_type == QUDA_MR_INVERTER)
       return true;
 
-    // CG3 is rather unstable with low precision
-    if ((inverter_type == QUDA_CG3_INVERTER || inverter_type == QUDA_CG3NE_INVERTER || inverter_type == QUDA_CG3NR_INVERTER)
-        && prec_sloppy < QUDA_DOUBLE_PRECISION)
-      return true;
+    // BiCGStab-L is unstable with staggered operator with low precision
+    // we could likely restore this when 20-bit quark fields are merged in
+    if (inverter_type == QUDA_BICGSTABL_INVERTER && prec_sloppy < QUDA_SINGLE_PRECISION) return true;
   }
+
+  // CG3 is rather unstable with low precision
+  if ((inverter_type == QUDA_CG3_INVERTER || inverter_type == QUDA_CG3NE_INVERTER || inverter_type == QUDA_CG3NR_INVERTER)
+      && prec_sloppy < QUDA_DOUBLE_PRECISION)
+    return true;
 
   // split-grid doesn't support multigrid at present
   if (use_split_grid && multishift > 1) return true;

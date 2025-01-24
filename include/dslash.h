@@ -33,8 +33,9 @@ namespace quda
 
   protected:
     Arg &arg;
-    const ColorSpinorField &out;
-    const ColorSpinorField &in;
+    cvector_ref<ColorSpinorField> &out;
+    cvector_ref<const ColorSpinorField> &in;
+    const ColorSpinorField &halo;
 
     const int nDimComms;
 
@@ -65,6 +66,11 @@ namespace quda
 
       if (arg.xpay) strcat(aux_base, ",xpay");
       if (arg.dagger) strcat(aux_base, ",dagger");
+      setRHSstring(aux_base, in.size());
+      strcat(aux_base, ",n_rhs_tile=");
+      char tile_str[16];
+      i32toa(tile_str, Arg::n_src_tile);
+      strcat(aux_base, tile_str);
     }
 
     /**
@@ -125,17 +131,17 @@ namespace quda
           // kernel, then we only have to update the non-p2p ghosts,
           // since these may have been assigned to zero-copy memory
           if (!comm_peer2peer_enabled(dir, dim) || arg.kernel_type == INTERIOR_KERNEL || arg.kernel_type == UBER_KERNEL) {
-            ghost[2 * dim + dir] = (typename Arg::Float *)((char *)in.Ghost2() + in.GhostOffset(dim, dir));
+            ghost[2 * dim + dir] = (typename Arg::Float *)((char *)halo.Ghost2() + halo.GhostOffset(dim, dir));
           }
         }
       }
 
-      arg.in.resetGhost(ghost);
+      arg.halo.resetGhost(ghost);
 
       if (arg.pack_threads && (arg.kernel_type == INTERIOR_KERNEL || arg.kernel_type == UBER_KERNEL)) {
         arg.blocks_per_dir = tp.aux.x;
         arg.setPack(true, this->packBuffer); // need to recompute for updated block_per_dir
-        arg.in_pack.resetGhost(this->packBuffer);
+        arg.halo_pack.resetGhost(this->packBuffer);
         tp.grid.x += arg.pack_blocks;
         arg.counter = dslash::get_dslash_shmem_sync_counter();
       }
@@ -154,8 +160,8 @@ namespace quda
       }
     }
 
-    virtual int blockStep() const override { return 16; }
-    virtual int blockMin() const override { return 16; }
+    virtual int blockStep() const override { return (arg.shmem & 64) ? 8 : 16; }
+    virtual int blockMin() const override { return (arg.shmem & 64) ? 8 : 16; }
 
     unsigned int maxSharedBytesPerBlock() const override { return maxDynamicSharedBytesPerBlock(); }
 
@@ -205,13 +211,12 @@ namespace quda
 
     virtual void initTuneParam(TuneParam &param) const override
     {
-      /* for nvshmem uber kernels the current synchronization requires use to keep the y and z dimension local to the
+      /* for nvshmem uber kernels the current synchronization requires us to keep the y and z dimension local to the
        * block. This can be removed when we introduce a finer grained synchronization which takes into account the y and
        * z components explicitly */
-      if (arg.shmem & 64) {
-        step_y = vector_length_y;
-        step_z = vector_length_z;
-      }
+      step_y = arg.shmem & 64 ? vector_length_y : step_y_bkup;
+      step_z = arg.shmem & 64 ? vector_length_z : step_z_bkup;
+
       TunableKernel3D::initTuneParam(param);
       if (arg.pack_threads && (arg.kernel_type == INTERIOR_KERNEL || arg.kernel_type == UBER_KERNEL))
         param.aux.x = 1;                                                        // packing blocks per direction
@@ -223,10 +228,9 @@ namespace quda
       /* for nvshmem uber kernels the current synchronization requires use to keep the y and z dimension local to the
        * block. This can be removed when we introduce a finer grained synchronization which takes into account the y and
        * z components explicitly. */
-      if (arg.shmem & 64) {
-        step_y = vector_length_y;
-        step_z = vector_length_z;
-      }
+      step_y = arg.shmem & 64 ? vector_length_y : step_y_bkup;
+      step_z = arg.shmem & 64 ? vector_length_z : step_z_bkup;
+
       TunableKernel3D::defaultTuneParam(param);
       if (arg.pack_threads && (arg.kernel_type == INTERIOR_KERNEL || arg.kernel_type == UBER_KERNEL))
         param.aux.x = 1;                                                        // packing blocks per direction
@@ -327,8 +331,15 @@ namespace quda
 
     Arg &dslashParam; // temporary addition for policy compatibility
 
-    Dslash(Arg &arg, const ColorSpinorField &out, const ColorSpinorField &in, const std::string &app_base = "") :
-      TunableKernel3D(in, 1, arg.nParity), arg(arg), out(out), in(in), nDimComms(4), dslashParam(arg)
+    Dslash(Arg &arg, cvector_ref<ColorSpinorField> &out, cvector_ref<const ColorSpinorField> &in,
+           const ColorSpinorField &halo, const std::string &app_base = "") :
+      TunableKernel3D(in[0], (halo.X(4) + Arg::n_src_tile - 1) / Arg::n_src_tile, arg.nParity),
+      arg(arg),
+      out(out),
+      in(in),
+      halo(halo),
+      nDimComms(4),
+      dslashParam(arg)
     {
       if (checkLocation(out, in) == QUDA_CPU_FIELD_LOCATION)
         errorQuda("CPU Fields not supported in Dslash framework yet");
@@ -376,21 +387,21 @@ namespace quda
       for (int dim = 0; dim < 4; dim++) {
         for (int dir = 0; dir < 2; dir++) {
           if ((location & Remote) && comm_peer2peer_enabled(dir, dim)) { // pack to p2p remote
-            packBuffer[2 * dim + dir] = static_cast<char *>(in.remoteFace_d(dir, dim)) + in.GhostOffset(dim, 1 - dir);
+            packBuffer[2 * dim + dir] = static_cast<char *>(halo.remoteFace_d(dir, dim)) + halo.GhostOffset(dim, 1 - dir);
           } else if (location & Host && !comm_peer2peer_enabled(dir, dim)) { // pack to cpu memory
-            packBuffer[2 * dim + dir] = in.myFace_hd(dir, dim);
+            packBuffer[2 * dim + dir] = halo.myFace_hd(dir, dim);
           } else if (location & Shmem) {
             // we check whether we can directly pack into the in.remoteFace_d(dir, dim) buffer on the remote GPU
             // pack directly into remote or local memory
-            packBuffer[2 * dim + dir] = in.remoteFace_d(dir, dim) ?
-              static_cast<char *>(in.remoteFace_d(dir, dim)) + in.GhostOffset(dim, 1 - dir) :
-              in.myFace_d(dir, dim);
+            packBuffer[2 * dim + dir] = halo.remoteFace_d(dir, dim) ?
+              static_cast<char *>(halo.remoteFace_d(dir, dim)) + halo.GhostOffset(dim, 1 - dir) :
+              halo.myFace_d(dir, dim);
             // whether we need to shmem_putmem into the receiving buffer
-            packBuffer[2 * QUDA_MAX_DIM + 2 * dim + dir] = in.remoteFace_d(dir, dim) ?
+            packBuffer[2 * QUDA_MAX_DIM + 2 * dim + dir] = halo.remoteFace_d(dir, dim) ?
               nullptr :
-              static_cast<char *>(in.remoteFace_r()) + in.GhostOffset(dim, 1 - dir);
+              static_cast<char *>(halo.remoteFace_r()) + halo.GhostOffset(dim, 1 - dir);
           } else { // pack to local gpu memory
-            packBuffer[2 * dim + dir] = in.myFace_d(dir, dim);
+            packBuffer[2 * dim + dir] = halo.myFace_d(dir, dim);
           }
         }
       }
@@ -490,10 +501,11 @@ namespace quda
       case EXTERIOR_KERNEL_Y:
       case EXTERIOR_KERNEL_Z:
       case EXTERIOR_KERNEL_T:
-        flops_ = (ghost_flops + (arg.xpay ? xpay_flops : xpay_flops / 2)) * 2 * in.GhostFace()[arg.kernel_type];
+        flops_ = (ghost_flops + (arg.xpay ? xpay_flops : xpay_flops / 2)) * 2 * halo.GhostFace()[arg.kernel_type];
         break;
       case EXTERIOR_KERNEL_ALL: {
-        long long ghost_sites = 2 * (in.GhostFace()[0] + in.GhostFace()[1] + in.GhostFace()[2] + in.GhostFace()[3]);
+        long long ghost_sites
+          = 2 * (halo.GhostFace()[0] + halo.GhostFace()[1] + halo.GhostFace()[2] + halo.GhostFace()[3]);
         flops_ = (ghost_flops + (arg.xpay ? xpay_flops : xpay_flops / 2)) * ghost_sites;
         break;
       }
@@ -501,8 +513,8 @@ namespace quda
       case UBER_KERNEL:
       case KERNEL_POLICY: {
         if (arg.pack_threads && (arg.kernel_type == INTERIOR_KERNEL || arg.kernel_type == UBER_KERNEL))
-          flops_ += pack_flops * arg.nParity * in.getDslashConstant().Ls * arg.pack_threads;
-        long long sites = in.Volume();
+          flops_ += pack_flops * arg.nParity * halo.getDslashConstant().Ls * arg.pack_threads;
+        long long sites = halo.Volume();
         flops_ = (num_dir * (in.Nspin() / 4) * in.Ncolor() * in.Nspin() + // spin project (=0 for staggered)
                   num_dir * num_mv_multiply * mv_flops +                  // SU(3) matrix-vector multiplies
                   ((num_dir - 1) * 2 * in.Ncolor() * in.Nspin()))
@@ -513,11 +525,11 @@ namespace quda
         // now correct for flops done by exterior kernel
         long long ghost_sites = 0;
         for (int d = 0; d < 4; d++)
-          if (arg.commDim[d]) ghost_sites += 2 * in.GhostFace()[d];
+          if (arg.commDim[d]) ghost_sites += 2 * halo.GhostFace()[d];
         flops_ -= ghost_flops * ghost_sites;
 
         if (arg.kernel_type == INTERIOR_KERNEL && arg.pack_threads)
-          flops_ += pack_flops * arg.nParity * in.getDslashConstant().Ls * arg.pack_threads;
+          flops_ += pack_flops * arg.nParity * halo.getDslashConstant().Ls * arg.pack_threads;
         break;
       }
       }
@@ -541,9 +553,10 @@ namespace quda
       case EXTERIOR_KERNEL_X:
       case EXTERIOR_KERNEL_Y:
       case EXTERIOR_KERNEL_Z:
-      case EXTERIOR_KERNEL_T: bytes_ = ghost_bytes * 2 * in.GhostFace()[arg.kernel_type]; break;
+      case EXTERIOR_KERNEL_T: bytes_ = ghost_bytes * 2 * halo.GhostFace()[arg.kernel_type]; break;
       case EXTERIOR_KERNEL_ALL: {
-        long long ghost_sites = 2 * (in.GhostFace()[0] + in.GhostFace()[1] + in.GhostFace()[2] + in.GhostFace()[3]);
+        long long ghost_sites
+          = 2 * (halo.GhostFace()[0] + halo.GhostFace()[1] + halo.GhostFace()[2] + halo.GhostFace()[3]);
         bytes_ = ghost_bytes * ghost_sites;
         break;
       }
@@ -551,8 +564,8 @@ namespace quda
       case UBER_KERNEL:
       case KERNEL_POLICY: {
         if (arg.pack_threads && (arg.kernel_type == INTERIOR_KERNEL || arg.kernel_type == UBER_KERNEL))
-          bytes_ += pack_bytes * arg.nParity * in.getDslashConstant().Ls * arg.pack_threads;
-        long long sites = in.Volume();
+          bytes_ += pack_bytes * arg.nParity * halo.getDslashConstant().Ls * arg.pack_threads;
+        long long sites = halo.Volume();
         bytes_ = (num_dir * gauge_bytes + ((num_dir - 2) * spinor_bytes + 2 * proj_spinor_bytes) + spinor_bytes) * sites;
         if (arg.xpay) bytes_ += spinor_bytes;
 
@@ -560,11 +573,11 @@ namespace quda
         // now correct for bytes done by exterior kernel
         long long ghost_sites = 0;
         for (int d = 0; d < 4; d++)
-          if (arg.commDim[d]) ghost_sites += 2 * in.GhostFace()[d];
+          if (arg.commDim[d]) ghost_sites += 2 * halo.GhostFace()[d];
         bytes_ -= ghost_bytes * ghost_sites;
 
         if (arg.kernel_type == INTERIOR_KERNEL && arg.pack_threads)
-          bytes_ += pack_bytes * arg.nParity * in.getDslashConstant().Ls * arg.pack_threads;
+          bytes_ += pack_bytes * arg.nParity * halo.getDslashConstant().Ls * arg.pack_threads;
         break;
       }
       }

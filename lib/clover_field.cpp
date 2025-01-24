@@ -244,9 +244,14 @@ namespace quda {
       param.reconstruct = false; // we cannot use a compressed field for storing the inverse
       CloverField clover_inverse(param);
       clover_inverse.copy(src, false);
-      cloverInvert(clover_inverse, true);
+      cloverInvert(clover_inverse, false);
       copy(clover_inverse, true);
       dynamic_inverse_copy = false;
+      if (src.Location() == QUDA_CUDA_FIELD_LOCATION && location == QUDA_CPU_FIELD_LOCATION) {
+        getProfile().TPSTOP(QUDA_PROFILE_D2H);
+      } else if (src.Location() == QUDA_CPU_FIELD_LOCATION && location == QUDA_CUDA_FIELD_LOCATION) {
+        getProfile().TPSTOP(QUDA_PROFILE_H2D);
+      }
       return;
     }
 

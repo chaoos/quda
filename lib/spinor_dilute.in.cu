@@ -2,6 +2,7 @@
 #include <kernels/spinor_dilute.cuh>
 #include <tunable_nd.h>
 #include <instantiate.h>
+#include <int_list.hpp>
 
 namespace quda
 {
@@ -79,21 +80,12 @@ namespace quda
     long long bytes() const { return v.size() * v[0].Bytes() + src.Bytes(); }
   };
 
-  template <int...> struct IntList {
-  };
-
   template <typename real, int Ns, int Nc, int... N>
   void spinorDilute(const ColorSpinorField &src, std::vector<ColorSpinorField> &v, QudaDilutionType type,
                     const lat_dim_t &local_block, IntList<Nc, N...>)
   {
     if (src.Ncolor() == Nc) {
-      if constexpr (Nc <= 32) {
-        SpinorDilute<real, Ns, Nc>(src, v, type, local_block);
-      } else {
-        errorQuda(
-          "nColor = %d is too large to compile, see QUDA issue #1422 (https://github.com/lattice/quda/issues/1422)",
-          src.Ncolor());
-      }
+      SpinorDilute<real, Ns, Nc>(src, v, type, local_block);
     } else {
       if constexpr (sizeof...(N) > 0)
         spinorDilute<real, Ns>(src, v, type, local_block, IntList<N...>());

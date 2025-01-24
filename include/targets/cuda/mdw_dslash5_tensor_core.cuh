@@ -66,16 +66,16 @@ namespace quda
   // one(spin).
   // x by y
   template <int M_sm, bool dagger, class Arg>
-  __device__ inline void construct_matrix_a_m5inv(Arg &arg, half *sm_a, const float *mp = nullptr,
-                                                  const float *mm = nullptr)
+  __device__ inline void construct_matrix_a_m5inv(const Arg &arg, half *sm_a, float alpha, float beta,
+                                                  const float *mp = nullptr, const float *mm = nullptr)
   {
     constexpr int Ls = Arg::Ls;
     const float k = arg.kappa;
     // if we rescale, then the actual matrix is alpha*m5inv+beta.
     // Otherwise a = 1., b = 0.;
-    const float b = arg.beta;
+    const float b = beta;
 
-    const float inv = arg.alpha * arg.fac_inv;
+    const float inv = alpha * arg.fac_inv;
 
     auto offset_k = threadIdx.y * 4;
     auto x = threadIdx.x;
@@ -137,12 +137,12 @@ namespace quda
   // one(spin).
   // x by y
   template <int M_sm, bool dagger, class Arg>
-  __device__ inline void construct_matrix_a_d5(Arg &arg, half *sm_a)
+  __device__ inline void construct_matrix_a_d5(const Arg &arg, half *sm_a, float alpha, float beta)
   {
     constexpr int Ls = Arg::Ls;
     // if we rescale, then the actual matrix is alpha*m5inv+beta.
     // Otherwise a = 1., b = 0.;
-    const float b = arg.beta;
+    const float b = beta;
 
     auto offset_k = threadIdx.y * 4;
     auto x = threadIdx.x;
@@ -165,8 +165,8 @@ namespace quda
       }
 
       // exponent = 0 means we are on the diagonal.
-      float RpL = exponent == 0 ? arg.alpha * (factorR + factorL) + b : arg.alpha * (factorR + factorL);
-      float RmL = arg.alpha * (factorR - factorL);
+      float RpL = exponent == 0 ? alpha * (factorR + factorL) + b : alpha * (factorR + factorL);
+      float RmL = alpha * (factorR - factorL);
 
       half2 *A = reinterpret_cast<half2 *>(sm_a);
 
@@ -304,7 +304,8 @@ namespace quda
       }
     }
 
-    output.norm[sid] = __half2float(max_) * scale * fixedInvMaxValue<storage_type>::value;
+    auto norm = reinterpret_cast<float *>(output.field + output.volumeCB * 24);
+    norm[sid] = __half2float(max_) * scale * fixedInvMaxValue<storage_type>::value;
 
     const half2 max_i_div_max2_ = __half2half2(__hdiv(fixedMaxValue<storage_type>::value, max_));
 #if QUDA_ORDER_FP == 8 // use float8/short8

@@ -163,9 +163,7 @@ namespace quda {
   void Transfer::createTmp() const
   {
     // The CPU temporaries are needed for creating geometry mappings.
-    if ((transfer_type == QUDA_TRANSFER_COARSE_KD || transfer_type == QUDA_TRANSFER_OPTIMIZED_KD
-         || transfer_type == QUDA_TRANSFER_OPTIMIZED_KD_DROP_LONG))
-      return;
+    if (transfer_type == QUDA_TRANSFER_OPTIMIZED_KD || transfer_type == QUDA_TRANSFER_OPTIMIZED_KD_DROP_LONG) return;
 
     if (!fine_tmp_h.empty()) return;
 
@@ -341,6 +339,7 @@ namespace quda {
   // apply the prolongator
   void Transfer::P(cvector_ref<ColorSpinorField> &out, cvector_ref<const ColorSpinorField> &in) const {
     getProfile().TPSTART(QUDA_PROFILE_COMPUTE);
+    if (out.size() != in.size()) errorQuda("Mismatched set sizes %lu != %lu", out.size(), in.size());
 
     initializeLazy(use_gpu ? QUDA_CUDA_FIELD_LOCATION : QUDA_CPU_FIELD_LOCATION);
     const int *fine_to_coarse = use_gpu ? fine_to_coarse_d : fine_to_coarse_h;
@@ -349,11 +348,11 @@ namespace quda {
       StaggeredProlongate(out, in, fine_to_coarse, spin_map, parity);
     } else if (transfer_type == QUDA_TRANSFER_OPTIMIZED_KD || transfer_type == QUDA_TRANSFER_OPTIMIZED_KD_DROP_LONG) {
 
-      if (in[0].SiteSubset() != QUDA_FULL_SITE_SUBSET) errorQuda("Optimized KD op only supports full-parity spinors");
-      if (out[0].VolumeCB() != in[0].VolumeCB()) errorQuda("Optimized KD transfer is only between equal volumes");
+      if (in.SiteSubset() != QUDA_FULL_SITE_SUBSET) errorQuda("Optimized KD op only supports full-parity spinors");
+      if (out.VolumeCB() != in.VolumeCB()) errorQuda("Optimized KD transfer is only between equal volumes");
 
       // the optimized KD op acts on fine spinors
-      if (out[0].SiteSubset() == QUDA_PARITY_SITE_SUBSET) {
+      if (out.SiteSubset() == QUDA_PARITY_SITE_SUBSET) {
         for (auto i = 0u; i < out.size(); i++) out[i] = in[i].Even();
       } else {
         for (auto i = 0u; i < out.size(); i++) out[i] = in[i];
@@ -398,10 +397,10 @@ namespace quda {
 
       for (auto i = 0u; i < in.size(); i++) input[i] = in[i]; // copy result to input field (aliasing handled automatically)
 
-      if (V.SiteSubset() == QUDA_PARITY_SITE_SUBSET && out[0].SiteSubset() == QUDA_FULL_SITE_SUBSET)
+      if (V.SiteSubset() == QUDA_PARITY_SITE_SUBSET && out.SiteSubset() == QUDA_FULL_SITE_SUBSET)
         errorQuda("Cannot prolongate to a full field since only have single parity null-space components");
 
-      Prolongate(output, input, V, fine_to_coarse, spin_map, parity);
+      Prolongate(output, input, V, fine_to_coarse, spin_map, _use_mma, parity);
 
       for (auto i = 0u; i < out.size(); i++) out[i] = output[i]; // copy result to out field (aliasing handled automatically)
     } else {
@@ -415,6 +414,7 @@ namespace quda {
   void Transfer::R(cvector_ref<ColorSpinorField> &out, cvector_ref<const ColorSpinorField> &in) const
   {
     getProfile().TPSTART(QUDA_PROFILE_COMPUTE);
+    if (out.size() != in.size()) errorQuda("Mismatched set sizes %lu != %lu", out.size(), in.size());
 
     initializeLazy(use_gpu ? QUDA_CUDA_FIELD_LOCATION : QUDA_CPU_FIELD_LOCATION);
     const int *fine_to_coarse = use_gpu ? fine_to_coarse_d : fine_to_coarse_h;
@@ -424,11 +424,11 @@ namespace quda {
       StaggeredRestrict(out, in, fine_to_coarse, spin_map, parity);
     } else if (transfer_type == QUDA_TRANSFER_OPTIMIZED_KD || transfer_type == QUDA_TRANSFER_OPTIMIZED_KD_DROP_LONG) {
 
-      if (out[0].SiteSubset() != QUDA_FULL_SITE_SUBSET) errorQuda("Optimized KD op only supports full-parity spinors");
-      if (out[0].VolumeCB() != in[0].VolumeCB()) errorQuda("Optimized KD transfer is only between equal volumes");
+      if (out.SiteSubset() != QUDA_FULL_SITE_SUBSET) errorQuda("Optimized KD op only supports full-parity spinors");
+      if (out.VolumeCB() != in.VolumeCB()) errorQuda("Optimized KD transfer is only between equal volumes");
 
       // the optimized KD op acts on fine spinors
-      if (in[0].SiteSubset() == QUDA_PARITY_SITE_SUBSET) {
+      if (in.SiteSubset() == QUDA_PARITY_SITE_SUBSET) {
         for (auto i = 0u; i < out.size(); i++) out[i].Even() = in[i];
         for (auto i = 0u; i < out.size(); i++) blas::zero(out[i].Odd());
       } else {
@@ -472,10 +472,10 @@ namespace quda {
 
       for (auto i = 0u; i < in.size(); i++) input[i] = in[i]; // copy result to input field (aliasing handled automatically) FIXME - maybe not?
 
-      if (V.SiteSubset() == QUDA_PARITY_SITE_SUBSET && in[0].SiteSubset() == QUDA_FULL_SITE_SUBSET)
+      if (V.SiteSubset() == QUDA_PARITY_SITE_SUBSET && in.SiteSubset() == QUDA_FULL_SITE_SUBSET)
         errorQuda("Cannot restrict a full field since only have single parity null-space components");
 
-      Restrict(output, input, V, fine_to_coarse, coarse_to_fine, spin_map, parity);
+      Restrict(output, input, V, fine_to_coarse, coarse_to_fine, spin_map, _use_mma, parity);
 
       for (auto i = 0u; i < out.size(); i++) out[i] = output[i]; // copy result to out field (aliasing handled automatically)
 

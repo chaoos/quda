@@ -215,6 +215,8 @@ namespace quda {
 
     TimeProfile(std::string fname, bool use_global) : fname(fname), switchOff(false), use_global(use_global) { ; }
 
+    auto Name() const { return fname; }
+
     /**< Print out the profile information */
     void Print();
 
@@ -239,13 +241,20 @@ namespace quda {
      the profile stack, and be popped when its destructor is called.
    */
   struct pushProfile {
-    static inline double secs_dummy = 0;
-    static inline double gflops_dummy = 0;
     TimeProfile &profile;
     double &secs;
     double &gflops;
+    double &energy;
+    double &power;
+    double &temp;
+    double &clock;
     uint64_t flops;
-    pushProfile(TimeProfile &profile, double &secs = secs_dummy, double &gflops = gflops_dummy);
+    bool active = false;
+    size_t monitor_start;
+    size_t monitor_end;
+
+    pushProfile(TimeProfile &profile, QudaInvertParam *param = nullptr);
+    pushProfile(TimeProfile &profile, QudaQuarkSmearParam *param);
     virtual ~pushProfile();
   };
 

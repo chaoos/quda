@@ -137,7 +137,7 @@ namespace quda
   inline void check_displacement(const int displacement[], int ndim)
   {
     for (int i = 0; i < ndim; i++) {
-      if (abs(displacement[i]) > max_displacement) {
+      if (std::abs(displacement[i]) > max_displacement) {
         errorQuda("Requested displacement[%d] = %d is greater than maximum allowed", i, displacement[i]);
       }
     }
@@ -232,7 +232,7 @@ namespace quda
           disable_peer_to_peer_bidir = true;
         }
 
-        enable_peer_to_peer = abs(enable_peer_to_peer);
+        enable_peer_to_peer = std::abs(enable_peer_to_peer);
 
       } else { // !enable_peer_to_peer_env
         if (getVerbosity() > QUDA_SILENT && rank == 0)
@@ -498,6 +498,20 @@ namespace quda
     }
 
     return blacklist;
+  }
+
+  bool comm_zero_copy_enabled()
+  {
+    static bool zero_copy_enabled = false;
+#ifdef MULTI_GPU
+    static bool zero_copy_init = false;
+    if (!zero_copy_init) {
+      char *enable_zero_copy_env = getenv("QUDA_ENABLE_ZERO_COPY");
+      if (enable_zero_copy_env && strcmp(enable_zero_copy_env, "1") == 0) { zero_copy_enabled = true; }
+      zero_copy_init = true;
+    }
+#endif
+    return zero_copy_enabled;
   }
 
   bool comm_nvshmem_enabled()

@@ -3,6 +3,7 @@
 #include <kernels/color_spinor_pack.cuh>
 #include <instantiate.h>
 #include <multigrid.h>
+#include <int_list.hpp>
 
 /**
    @file color_spinor_pack.cu
@@ -153,8 +154,6 @@ namespace quda {
     long long bytes() const { return work_items * 2 * a.Nspin() * a.Ncolor() * (a.Precision() + a.GhostPrecision()); }
   };
 
-  template <int...> struct IntList { };
-
   template <typename Float, typename ghostFloat, int Ns, bool native, int fineColor, int coarseColor, int...N>
   bool genericPackGhostC(void **ghost, const ColorSpinorField &a, QudaParity parity, int nFace, int dagger,
                          MemoryLocation *destination, int shmem, cvector_ref<const ColorSpinorField> &v,
@@ -242,7 +241,7 @@ namespace quda {
   }
 
   void genericPackGhost(void **ghost, const ColorSpinorField &a, QudaParity parity, int nFace, int dagger,
-                        MemoryLocation *destination_, int shmem, cvector_ref<const ColorSpinorField> v)
+                        MemoryLocation *destination_, int shmem, cvector_ref<const ColorSpinorField> &v)
   {
     if (a.FieldOrder() == QUDA_QOP_DOMAIN_WALL_FIELD_ORDER) {
       errorQuda("Field order %d not supported", a.FieldOrder());

@@ -20,6 +20,19 @@ namespace quda {
 #endif
   }
 
+  /**
+     @brief Helper function that returns whether we have enabled
+     clover fermions.
+   */
+  constexpr bool is_enabled_twisted_clover()
+  {
+#ifdef GPU_TWISTED_CLOVER_DIRAC
+    return true;
+#else
+    return false;
+#endif
+  }
+
   namespace clover
   {
 
@@ -294,7 +307,7 @@ namespace quda {
 
     template <typename T = void *> auto data(bool inverse = false) const
     {
-      return inverse ? reinterpret_cast<T>(cloverInv.data()) : reinterpret_cast<T>(clover.data());
+      return inverse ? static_cast<T>(cloverInv.data()) : static_cast<T>(clover.data());
     }
 
     /**
@@ -531,13 +544,16 @@ namespace quda {
                          void *Out = 0, const void *In = 0);
 
   /**
-     @brief This function compute the Cholesky decomposition of each clover
-     matrix and stores the clover inverse field.
-
-     @param clover The clover field (contains both the field itself and its inverse)
-     @param computeTraceLog Whether to compute the trace logarithm of the clover term
+     @brief This function computes the Cholesky decomposition of each
+     clover matrix and stores the clover inverse field.  The lattice
+     sum of the trace log is computed here, and if the trace log
+     reports as Nan as error is thrown.
+     @param[in,out] clover The clover field (contains both the field
+     itself and its inverse)
+     @param[in] compute_tr_log Whether to only compute the trace log
+     (and not compute the inverse)
   */
-  void cloverInvert(CloverField &clover, bool computeTraceLog);
+  void cloverInvert(CloverField &clover, bool compute_tr_log);
 
   /**
      @brief Driver for the clover force computation.  Eventually the
@@ -563,7 +579,8 @@ namespace quda {
                           double sigma_coeff, bool detratio, QudaInvertParam &param);
 
   /**
-     @brief Compute the force contribution from the solver solution fields
+     @brief Compute outer product from the solver solution fields for
+     the force contribution from the solver solution fields
 
      Force(x, mu) = U(x, mu) * sum_i=1^nvec ( P_mu^+ x(x+mu) p(x)^\dag  +  P_mu^- p(x+mu) x(x)^\dag )
 
@@ -579,7 +596,7 @@ namespace quda {
      @param p Intermediate vectors (both parities)
      @param coeff Multiplicative coefficient (e.g., dt * residue)
    */
-  void computeCloverForce(GaugeField &force, const GaugeField &U, cvector_ref<const ColorSpinorField> &x,
+  void computeCloverOprod(GaugeField &force, const GaugeField &U, cvector_ref<const ColorSpinorField> &x,
                           cvector_ref<const ColorSpinorField> &p, const std::vector<double> &coeff);
   /**
      @brief Compute the outer product from the solver solution fields

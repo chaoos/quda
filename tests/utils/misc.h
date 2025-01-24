@@ -1,6 +1,7 @@
 #pragma once
 #include <quda.h>
 #include <string>
+#include <vector>
 
 const char *get_quda_ver_str();
 const char *get_recon_str(QudaReconstructType recon);
@@ -14,7 +15,26 @@ const char *get_matpc_str(QudaMatPCType);
 const char *get_solution_str(QudaSolutionType);
 const char *get_solve_str(QudaSolveType);
 const char *get_schwarz_str(QudaSchwarzType);
+
+/**
+   @brief Return a string corresponding to a QudaDslashType enum
+   @param[in] type A QudaDslashType
+   @return Corresponding string
+ */
 const char *get_dslash_str(QudaDslashType type);
+
+/**
+   @brief Return a std::vector of dslash types
+   @return std::vector of all dslash types
+ */
+std::vector<const char *> get_dslash_str_list();
+
+/**
+   @brief Return a QudaDslashType based on a string
+   @param[in] str Name of a dslash type
+   @return Corresponding QudaDslashType
+ */
+QudaDslashType get_dslash_from_str(const char *str);
 const char *get_flavor_str(QudaTwistFlavorType type);
 const char *get_solver_str(QudaInverterType type);
 const char *get_eig_spectrum_str(QudaEigSpectrumType type);
@@ -22,9 +42,11 @@ const char *get_eig_type_str(QudaEigType type);
 const char *get_ritz_location_str(QudaFieldLocation type);
 const char *get_memory_type_str(QudaMemoryType type);
 const char *get_contract_str(QudaContractType type);
+const char *get_dag_str(QudaDagType type);
 const char *get_gauge_smear_str(QudaGaugeSmearType type);
 std::string get_dilution_type_str(QudaDilutionType type);
 const char *get_blas_type_str(QudaBLASType type);
+const char *get_TwistFlavor_str(QudaTwistFlavorType type);
 
 #define XUP 0
 #define YUP 1

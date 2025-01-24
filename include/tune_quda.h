@@ -43,9 +43,33 @@ namespace quda {
    */
   const std::map<TuneKey, TuneParam> &getTuneCache();
 
+  /**
+     @brief Unify all instances of the tunecache across ranks.  This
+     is called after returning to a global communicator.
+     @param[in] rank_list The list of ranks from whose tunecaches we
+     want to merge to form the global tunecache
+   */
+  void joinTuneCache(const std::vector<int> &rank_list);
+
+  /**
+     @brief Return a string encoding the QUDA version
+   */
+  const std::string get_quda_version();
+
+  /**
+     @brief Return a string encoding the git hash
+   */
+  const std::string get_quda_hash();
+
+  /**
+     @brief Return the resource path (directory where QUDA read/write
+     tunecache and other internal info
+  */
+  const std::string get_resource_path();
+
   class Tunable {
 
-    friend TuneParam tuneLaunch(Tunable &, QudaTune, QudaVerbosity);
+    friend TuneParam tuneLaunch(Tunable &, bool, QudaVerbosity);
     static inline uint64_t _flops_global = 0;
     static inline uint64_t _bytes_global = 0;
 
@@ -96,7 +120,7 @@ namespace quda {
        by the autotuner.  This defaults to twice the number of
        processors on the GPU, since it's unlikely a large grid size
        will help (if a kernels needs more parallelism, the autotuner
-       will find this through increased block size.
+       will find this through increased block size).
      */
     virtual unsigned int maxGridSize() const { return 2 * device::processor_count(); }
 
@@ -278,7 +302,6 @@ namespace quda {
 
       if (tuneGridDim()) {
 	param.block = dim3(min_block_size,1,1);
-
 	param.grid = dim3(min_grid_size,1,1);
       } else {
 	// find the minimum valid blockDim
@@ -402,7 +425,7 @@ namespace quda {
    * @param[in] verbosity What verbosity to use during tuning?
    * @return The tuned launch parameters
    */
-  TuneParam tuneLaunch(Tunable &tunable, QudaTune enabled = getTuning(), QudaVerbosity verbosity = getVerbosity());
+  TuneParam tuneLaunch(Tunable &tunable, bool enabled = getTuning(), QudaVerbosity verbosity = getVerbosity());
 
   /**
    * @brief Post an event in the trace, recording where it was posted
@@ -438,6 +461,17 @@ namespace quda {
    * @brief Query whether we are tuning an uber kernel
    */
   bool uberTuning();
+
+  /**
+   * @brief Helper for setting the rhs string
+   */
+  inline void setRHSstring(char *str, int size)
+  {
+    strcat(str, ",n_rhs=");
+    char rhs_str[16];
+    i32toa(rhs_str, size);
+    strcat(str, rhs_str);
+  }
 
 } // namespace quda
 
