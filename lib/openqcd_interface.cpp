@@ -21,7 +21,7 @@
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
-static openQCD_QudaState_t qudaState = {false, -1, -1, -1, -1, 0.0, 0.0, 0.0, {}, {}, nullptr, {}, {}, ""};
+static openQCD_QudaState_t qudaState = {false, -1, -1, -1, -1, 0.0, 0.0, 0.0, 0, {}, {}, nullptr, {}, {}, ""};
 
 
 using namespace quda;
@@ -863,7 +863,8 @@ inline bool clover_field_get_up2date(void)
   return (gauge_field_get_up2date() && qudaState.swd_ud_rev == qudaState.ud_rev && qudaState.swd_ad_rev == qudaState.ad_rev
           && qudaState.swd_kappa == 1.0 / (2.0 * (qudaState.layout.dirac_parms().m0 + 4.0))
           && qudaState.swd_su3csw == qudaState.layout.dirac_parms().su3csw
-          && qudaState.swd_u1csw == qudaState.layout.dirac_parms().u1csw);
+          && qudaState.swd_u1csw == qudaState.layout.dirac_parms().u1csw
+          && qudaState.swd_qhat == qudaState.layout.dirac_parms().qhat);
 }
 
 /**
@@ -883,7 +884,8 @@ inline bool mg_get_up2date(QudaInvertParam *param)
           && additional_prop->mg_ud_rev == qudaState.ud_rev && additional_prop->mg_ad_rev == qudaState.ad_rev
           && additional_prop->mg_kappa == 1.0 / (2.0 * (qudaState.layout.dirac_parms().m0 + 4.0))
           && additional_prop->mg_su3csw == qudaState.layout.dirac_parms().su3csw
-          && additional_prop->mg_u1csw == qudaState.layout.dirac_parms().u1csw);
+          && additional_prop->mg_u1csw == qudaState.layout.dirac_parms().u1csw
+          && additional_prop->mg_qhat == qudaState.layout.dirac_parms().qhat);
 }
 
 /**
@@ -901,6 +903,7 @@ inline void mg_set_revision(QudaInvertParam *param)
   additional_prop->mg_kappa = 1.0 / (2.0 * (qudaState.layout.dirac_parms().m0 + 4.0));
   additional_prop->mg_su3csw = qudaState.layout.dirac_parms().su3csw;
   additional_prop->mg_u1csw = qudaState.layout.dirac_parms().u1csw;
+  additional_prop->mg_qhat = qudaState.layout.dirac_parms().qhat;
 }
 
 /**
@@ -913,6 +916,7 @@ inline void clover_field_set_revision(void)
   qudaState.swd_kappa = 1.0 / (2.0 * (qudaState.layout.dirac_parms().m0 + 4.0));
   qudaState.swd_su3csw = qudaState.layout.dirac_parms().su3csw;
   qudaState.swd_u1csw = qudaState.layout.dirac_parms().u1csw;
+  qudaState.swd_qhat = qudaState.layout.dirac_parms().qhat;
 }
 
 /**
@@ -938,6 +942,7 @@ int openQCD_qudaInvertParamCheck(void *param_)
     logQuda(
       QUDA_VERBOSE, "Property m0/kappa does not match in QudaInvertParam struct and openQxD:dirac_parms (openQxD: %.6e, QUDA: %.6e)\n",
       (1.0 / (2.0 * (qudaState.layout.dirac_parms().m0 + 4.0))), param->kappa);
+    logQuda(QUDA_VERBOSE, "  => need params update\n");
     ret = false;
   }
 
@@ -946,6 +951,16 @@ int openQCD_qudaInvertParamCheck(void *param_)
       QUDA_VERBOSE,
       "Property u1csw does not match in QudaInvertParam struct and openQxD:dirac_parms (openQxD: %.6e, QUDA: %.6e)\n",
       qudaState.layout.dirac_parms().u1csw, additional_prop->u1csw);
+    logQuda(QUDA_VERBOSE, "  => need clover field and params update\n");
+    ret = false;
+  }
+
+  if (additional_prop->qhat != qudaState.layout.dirac_parms().qhat) {
+    logQuda(
+      QUDA_VERBOSE,
+      "Property qhat does not match in QudaInvertParam struct and openQxD:dirac_parms (openQxD: %d, QUDA: %d)\n",
+      qudaState.layout.dirac_parms().qhat, additional_prop->qhat);
+    logQuda(QUDA_VERBOSE, "  => need gauge, clover field and params update\n");
     ret = false;
   }
 
@@ -953,6 +968,7 @@ int openQCD_qudaInvertParamCheck(void *param_)
     logQuda(
       QUDA_VERBOSE, "Property su3csw/clover_csw does not match in QudaInvertParam struct and openQxD:dirac_parms (openQxD: %.6e, QUDA: %.6e)\n",
       qudaState.layout.dirac_parms().su3csw, param->clover_csw);
+    logQuda(QUDA_VERBOSE, "  => need clover field and params update\n");
     ret = false;
   }
 
@@ -987,9 +1003,9 @@ void inline check_eigensolver_id(int id)
  * @brief      Transfer the gauge field if the gauge field was updated in
  *             openQxD. (Re-)calculate or transfer the clover field if
  *             parameters have changed or gauge field was updated. Update the
- *             settings kappa, su3csw and u1csw in the QudaInvertParam struct
- *             such that they are in sync with openQxD. Set up or update the
- *             multigrid instance if set in QudaInvertParam and if gauge- or
+ *             settings kappa, qhat, su3csw and u1csw in the QudaInvertParam
+ *             struct such that they are in sync with openQxD. Set up or update
+ *             the multigrid instance if set in QudaInvertParam and if gauge- or
  *             clover-fields or parameters have changed.
  *
  * @param      param_  The parameter struct, where in param->additional_prop a
@@ -1003,7 +1019,8 @@ void openQCD_qudaSolverUpdate(void *param_)
   openQCD_QudaSolver *additional_prop = static_cast<openQCD_QudaSolver *>(param->additional_prop);
 
   bool do_param_update = !openQCD_qudaInvertParamCheck(param_);
-  bool do_gauge_transfer = !gauge_field_get_up2date() && !gauge_field_get_unset();
+  bool do_gauge_transfer = (!gauge_field_get_up2date() && !gauge_field_get_unset())
+    || additional_prop->qhat != qudaState.layout.dirac_parms().qhat;
   bool do_clover_update = !clover_field_get_up2date() && !gauge_field_get_unset();
   bool do_multigrid_update = param_ != qudaState.dirac_handle && param->inv_type_precondition == QUDA_MG_INVERTER
     && !mg_get_up2date(param) && !gauge_field_get_unset();
@@ -1042,9 +1059,10 @@ void openQCD_qudaSolverUpdate(void *param_)
   }
 
   if (do_param_update) {
-    logQuda(QUDA_VERBOSE, "Syncing kappa, su3csw, u1csw values from openQCD ...\n");
+    logQuda(QUDA_VERBOSE, "Syncing kappa, qhat, su3csw, u1csw values from openQCD ...\n");
     param->kappa = 1.0 / (2.0 * (qudaState.layout.dirac_parms().m0 + 4.0));
     additional_prop->u1csw = qudaState.layout.dirac_parms().u1csw;
+    additional_prop->qhat = qudaState.layout.dirac_parms().qhat;
     set_su3csw(param, qudaState.layout.dirac_parms().su3csw);
 
     QudaInvertParam *mg_inv_param = additional_prop->mg_param->invert_param;
@@ -1061,6 +1079,7 @@ void openQCD_qudaSolverUpdate(void *param_)
       qudaState.swd_kappa = 0.0;
       qudaState.swd_su3csw = 0.0;
       qudaState.swd_u1csw = 0.0;
+      qudaState.swd_qhat = 0;
     } else {
       if (qudaState.layout.flds_parms().gauge == OPENQCD_GAUGE_SU3) {
         /**
@@ -1117,6 +1136,7 @@ void openQCD_qudaSolverUpdate(void *param_)
       additional_prop->mg_kappa = 0.0;
       additional_prop->mg_su3csw = 0.0;
       additional_prop->mg_u1csw = 0.0;
+      additional_prop->mg_qhat = 0;
     }
 
     if (param->preconditioner == nullptr) {
@@ -1488,7 +1508,8 @@ void *openQCD_qudaSolverReadIn(int id)
   sprintf(additional_prop->infile, "%s", qudaState.infile);
   additional_prop->id = id;
   additional_prop->mg_param = multigrid_param;
-  additional_prop->u1csw = qudaState.layout.dirac_parms().u1csw;
+  additional_prop->u1csw = 0.0;
+  additional_prop->qhat = 0.0;
   param->additional_prop = reinterpret_cast<void *>(additional_prop);
 
   return (void *)param;
@@ -1654,11 +1675,13 @@ void openQCD_qudaSolverPrintSetup(int id)
     printfQuda("additional_prop->id = %d\n", additional_prop->id);
     printfQuda("additional_prop->mg_param = %p\n", additional_prop->mg_param);
     printfQuda("additional_prop->u1csw = %.6e\n", additional_prop->u1csw);
+    printfQuda("additional_prop->qhat = %d\n", additional_prop->qhat);
     printfQuda("additional_prop->mg_ud_rev = %d\n", additional_prop->mg_ud_rev);
     printfQuda("additional_prop->mg_ad_rev = %d\n", additional_prop->mg_ad_rev);
     printfQuda("additional_prop->mg_kappa = %.6e\n", additional_prop->mg_kappa);
     printfQuda("additional_prop->mg_su3csw = %.6e\n", additional_prop->mg_su3csw);
     printfQuda("additional_prop->mg_u1csw = %.6e\n", additional_prop->mg_u1csw);
+    printfQuda("additional_prop->mg_qhat = %d\n", additional_prop->mg_qhat);
     printfQuda("handle = %p\n", param);
     printfQuda("hash = %d\n", openQCD_qudaSolverGetHash(id));
 

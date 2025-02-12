@@ -137,6 +137,7 @@ typedef struct {
   double swd_kappa;  /** kappa corresponding to the current SW field in QUDA */
   double swd_su3csw; /** SU(3) csw coefficient corresponding to the current SW field in QUDA */
   double swd_u1csw;  /** U(1) csw coefficient corresponding to the current SW field in QUDA */
+  int swd_qhat;      /** qhat coefficient corresponding to the current SW field in QUDA */
   openQCD_QudaInitArgs_t init;
   openQCD_QudaLayout_t layout;
   void *dirac_handle;                       /** void-pointer to QudaInvertParam struct for the Dirac operator.
@@ -153,11 +154,13 @@ typedef struct openQCD_QudaSolver_s {
   int id;                       /** Solver section identifier in the input file */
   QudaMultigridParam *mg_param; /** Pointer to the multigrid param struct */
   double u1csw;                 /** u1csw property */
+  int qhat;                     /** qhat property */
   int mg_ud_rev;                /** Revision of ud field from openqxd */
   int mg_ad_rev;                /** Revision of ad field from openqxd */
   double mg_kappa;              /** kappa corresponding to the current mg-instance in QUDA */
   double mg_su3csw;             /** SU(3) csw coefficient corresponding to the current mg-instance in QUDA */
   double mg_u1csw;              /** U(1) csw coefficient corresponding to the current mg-instance in QUDA */
+  int mg_qhat;                  /** qhat corresponding to the current mg-instance in QUDA */
 } openQCD_QudaSolver;
 
 typedef struct {
