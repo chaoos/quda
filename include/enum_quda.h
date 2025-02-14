@@ -52,7 +52,7 @@ typedef enum QudaGaugeFieldOrder_s {
   QUDA_BQCD_GAUGE_ORDER,        // expect *gauge, mu, even-odd, spacetime+halos, column-row order
   QUDA_TIFR_GAUGE_ORDER,        // expect *gauge, mu, even-odd, spacetime, column-row order
   QUDA_TIFR_PADDED_GAUGE_ORDER, // expect *gauge, mu, parity, t, z+halo, y, x/2, column-row order
-  QUDA_OPENQCD_GAUGE_ORDER,     // expect *gauge, spacetime, mu, parity row-column order -- links attached to odd points only
+  QUDA_OPENQCD_GAUGE_ORDER, // expect *gauge, spacetime, mu, parity row-column order -- links attached to odd points only
   QUDA_INVALID_GAUGE_ORDER = QUDA_INVALID_ENUM
 } QudaGaugeFieldOrder;
 
@@ -376,17 +376,20 @@ typedef enum QudaFieldCreate_s {
   QUDA_INVALID_FIELD_CREATE = QUDA_INVALID_ENUM
 } QudaFieldCreate;
 
-typedef enum QudaGammaBasis_s {          // gamj=((top 2 rows)(bottom 2 rows))  s1,s2,s3 are Pauli spin matrices, 1 is 2x2 identity
-  QUDA_DEGRAND_ROSSI_GAMMA_BASIS,   // gam1=((0,i*s1)(-i*s1,0)) gam2=((0,-i*s2)(i*s2,0)) gam3=((0,i*s3)(-i*s3,0)) gam4=((0,1)(1,0))  gam5=((-1,0)(0,1))
-  QUDA_UKQCD_GAMMA_BASIS,           // gam1=((0,i*s1)(-i*s1,0)) gam2=((0,i*s2)(-i*s2,0)) gam3=((0,i*s3)(-i*s3,0)) gam4=((1,0)(0,-1)) gam5=((0,-1)(-1,0))
-  QUDA_CHIRAL_GAMMA_BASIS,          // gam1=((0,-i*s1)(i*s1,0)) gam2=((0,-i*s2)(i*s2,0)) gam3=((0,-i*s3)(i*s3,0)) gam4=((0,-1)(-1,0))gam5=((1,0)(0,-1))
-  QUDA_OPENQCD_GAMMA_BASIS,         // gam1=((0,-i*s3)(i*s3,0)) gam2=((0,-1)(-1,0)) gam3=((0,-s1)(s1,0)) gam4=((0,-i*s2)(i*s2,0)) gam5=((1,0)(0,-1))
-  QUDA_DIRAC_PAULI_GAMMA_BASIS,     // gam1=((0,-i*s1)(i*s1,0)) gam2=((0,-i*s2)(i*s2,0)) gam3=((0,-i*s3)(i*s3,0)) gam4=((1,0)(0,-1)) gam5=((0,1)(1,0))
-  QUDA_INVALID_GAMMA_BASIS = QUDA_INVALID_ENUM      //  gam5=gam4*gam1*gam2*gam3
+typedef enum QudaGammaBasis_s { // gamj=((top 2 rows)(bottom 2 rows))  s1,s2,s3 are Pauli spin matrices, 1 is 2x2 identity
+  QUDA_DEGRAND_ROSSI_GAMMA_BASIS, // gam1=((0,i*s1)(-i*s1,0)) gam2=((0,-i*s2)(i*s2,0)) gam3=((0,i*s3)(-i*s3,0))
+                                  // gam4=((0,1)(1,0))  gam5=((-1,0)(0,1))
+  QUDA_UKQCD_GAMMA_BASIS, // gam1=((0,i*s1)(-i*s1,0)) gam2=((0,i*s2)(-i*s2,0)) gam3=((0,i*s3)(-i*s3,0)) gam4=((1,0)(0,-1)) gam5=((0,-1)(-1,0))
+  QUDA_CHIRAL_GAMMA_BASIS, // gam1=((0,-i*s1)(i*s1,0)) gam2=((0,-i*s2)(i*s2,0)) gam3=((0,-i*s3)(i*s3,0)) gam4=((0,-1)(-1,0))gam5=((1,0)(0,-1))
+  QUDA_OPENQCD_GAMMA_BASIS, // gam1=((0,-i*s3)(i*s3,0)) gam2=((0,-1)(-1,0)) gam3=((0,-s1)(s1,0)) gam4=((0,-i*s2)(i*s2,0)) gam5=((1,0)(0,-1))
+  QUDA_DIRAC_PAULI_GAMMA_BASIS, // gam1=((0,-i*s1)(i*s1,0)) gam2=((0,-i*s2)(i*s2,0)) gam3=((0,-i*s3)(i*s3,0))
+                                // gam4=((1,0)(0,-1)) gam5=((0,1)(1,0))
+  QUDA_INVALID_GAMMA_BASIS = QUDA_INVALID_ENUM //  gam5=gam4*gam1*gam2*gam3
 } QudaGammaBasis;
-                                      //  Dirac-Pauli -> DeGrand-Rossi   T = i/sqrt(2)*((s2,-s2)(s2,s2))     field_DR = T * field_DP
-                                      //  UKQCD -> DeGrand-Rossi         T = i/sqrt(2)*((-s2,-s2)(-s2,s2))   field_DR = T * field_UK
-                                      //  Chiral -> DeGrand-Rossi        T = i*((0,-s2)(s2,0))               field_DR = T * field_chiral
+//  Dirac-Pauli -> DeGrand-Rossi   T = i/sqrt(2)*((s2,-s2)(s2,s2))     field_DR = T * field_DP
+//  UKQCD -> DeGrand-Rossi         T = i/sqrt(2)*((-s2,-s2)(-s2,s2))   field_DR = T * field_UK
+//  Chiral -> DeGrand-Rossi        T = i*((0,-s2)(s2,0))               field_DR = T * field_chiral
+
 typedef enum QudaSourceType_s {
   QUDA_POINT_SOURCE,
   QUDA_RANDOM_SOURCE,

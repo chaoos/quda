@@ -29,7 +29,7 @@ namespace quda {
       if (basis == QUDA_DEGRAND_ROSSI_GAMMA_BASIS || basis == QUDA_OPENQCD_GAMMA_BASIS) {
         switch (dir) {
         case 0:
-	case 1:
+        case 1:
 	  switch(row) {
 	  case 0: return 3;
 	  case 1: return 2;
@@ -58,7 +58,7 @@ namespace quda {
       } else {
         switch (dir) {
         case 0:
-	case 1:
+        case 1:
 	  switch(row) {
 	  case 0: return 3;
 	  case 1: return 2;

@@ -23,7 +23,6 @@
 
 static openQCD_QudaState_t qudaState = {false, -1, -1, -1, -1, 0.0, 0.0, 0.0, 0, {}, {}, nullptr, {}, {}, ""};
 
-
 using namespace quda;
 
 /**
@@ -956,10 +955,9 @@ int openQCD_qudaInvertParamCheck(void *param_)
   }
 
   if (additional_prop->qhat != qudaState.layout.dirac_parms().qhat) {
-    logQuda(
-      QUDA_VERBOSE,
-      "Property qhat does not match in QudaInvertParam struct and openQxD:dirac_parms (openQxD: %d, QUDA: %d)\n",
-      qudaState.layout.dirac_parms().qhat, additional_prop->qhat);
+    logQuda(QUDA_VERBOSE,
+            "Property qhat does not match in QudaInvertParam struct and openQxD:dirac_parms (openQxD: %d, QUDA: %d)\n",
+            qudaState.layout.dirac_parms().qhat, additional_prop->qhat);
     logQuda(QUDA_VERBOSE, "  => need gauge, clover field and params update\n");
     ret = false;
   }
@@ -1583,32 +1581,30 @@ void openQCD_qudaDw_NoLoads(double mu, void *d_in, void *d_out)
   /* truncated version of what MatQuda does */
   pushVerbosity(inv_param->verbosity);
 
-  bool pc = (inv_param->solution_type == QUDA_MATPC_SOLUTION ||
-      inv_param->solution_type == QUDA_MATPCDAG_MATPC_SOLUTION);
+  bool pc = (inv_param->solution_type == QUDA_MATPC_SOLUTION || inv_param->solution_type == QUDA_MATPCDAG_MATPC_SOLUTION);
 
   DiracParam diracParam;
   setDiracParam(diracParam, inv_param, pc);
 
   Dirac *dirac = Dirac::create(diracParam); // create the Dirac operator
-  dirac->M(*out, *in); // apply the operator
-  delete dirac; // clean up
+  dirac->M(*out, *in);                      // apply the operator
+  delete dirac;                             // clean up
 
   if (pc) {
     if (inv_param->mass_normalization == QUDA_MASS_NORMALIZATION) {
-      blas::ax(0.25/(inv_param->kappa*inv_param->kappa), *out);
+      blas::ax(0.25 / (inv_param->kappa * inv_param->kappa), *out);
     } else if (inv_param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
-      blas::ax(0.5/inv_param->kappa, *out);
+      blas::ax(0.5 / inv_param->kappa, *out);
     }
   } else {
-    if (inv_param->mass_normalization == QUDA_MASS_NORMALIZATION ||
-        inv_param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
-      blas::ax(0.5/inv_param->kappa, *out);
+    if (inv_param->mass_normalization == QUDA_MASS_NORMALIZATION
+        || inv_param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
+      blas::ax(0.5 / inv_param->kappa, *out);
     }
   }
 
   popVerbosity();
 }
-
 
 /**
  * @brief      Take the string-hash over a struct using std::hash.
