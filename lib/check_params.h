@@ -212,6 +212,7 @@ void printQudaEigParam(QudaEigParam *param) {
   P(use_norm_op, QUDA_BOOLEAN_INVALID);
   P(compute_svd, QUDA_BOOLEAN_INVALID);
   P(require_convergence, QUDA_BOOLEAN_INVALID);
+  P(spectrum, QUDA_SPECTRUM_INVALID);
   P(n_ev, INVALID_INT);
   P(n_kr, INVALID_INT);
   P(n_conv, INVALID_INT);
@@ -770,6 +771,7 @@ void printQudaInvertParam(QudaInvertParam *param) {
 #endif
 
 #ifdef INIT_PARAM
+  P(additional_prop, 0);
   P(distance_pc_alpha0, 0.0);
   P(distance_pc_t0, -1);
 #else
