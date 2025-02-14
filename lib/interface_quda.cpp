@@ -133,9 +133,6 @@ static TimeProfile profileClover("loadCloverQuda");
 //!< Profiler for dslashQuda
 static TimeProfile profileDslash("dslashQuda");
 
-//!< Profiler for MatQuda
-static TimeProfile profileMat("MatQuda");
-
 //!< Profiler for invertQuda
 static TimeProfile profileInvert("invertQuda");
 
@@ -1408,7 +1405,6 @@ void endQuda(void)
     profileGauge.Print();
     profileClover.Print();
     profileDslash.Print();
-    profileMat.Print();
     profileInvert.Print();
     profileInvertMultiSrc.Print();
     profileMulti.Print();
@@ -2252,7 +2248,6 @@ void covDevQuda(void *h_out, void *h_in, int dir, QudaInvertParam *param)
 
 void MatQuda(void *h_out, void *h_in, QudaInvertParam *inv_param)
 {
-  auto profile = pushProfile(profileMat, inv_param);
   pushVerbosity(inv_param->verbosity);
 
   const auto &gauge = (inv_param->dslash_type != QUDA_ASQTAD_DSLASH) ? *gaugePrecise : *gaugeFatPrecise;
@@ -2273,8 +2268,6 @@ void MatQuda(void *h_out, void *h_in, QudaInvertParam *inv_param)
   ColorSpinorParam cudaParam(cpuParam, *inv_param, QUDA_CUDA_FIELD_LOCATION);
   ColorSpinorField in(cudaParam);
   in = in_h;
-
-  profileMat.TPSTART(QUDA_PROFILE_COMPUTE);
 
   logQuda(QUDA_DEBUG_VERBOSE, "In CPU %e CUDA %e\n", blas::norm2(in_h), blas::norm2(in));
 
@@ -2306,8 +2299,6 @@ void MatQuda(void *h_out, void *h_in, QudaInvertParam *inv_param)
       blas::ax(0.5/kappa, out);
     }
   }
-
-  profileMat.TPSTOP(QUDA_PROFILE_COMPUTE);
 
   cpuParam.v = h_out;
   cpuParam.location = inv_param->output_location;
