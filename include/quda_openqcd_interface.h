@@ -410,7 +410,7 @@ MPI_Comm openQCD_qudaInvertAsyncStart(void);
  *
  * @param      residual  The residuals of the dispatched solves.
  */
-void openQCD_qudaInvertAsyncWait(double *residual);
+double openQCD_qudaInvertAsyncWait(double *residual);
 
 /**
  * @brief      Destroys an existing solver context and frees all involed

@@ -28,6 +28,7 @@
 
 typedef struct {
   bool created;
+  double time;
   pthread_t thread;
   MPI_Comm comm;
 } openQCD_QudaThread_t;
@@ -77,7 +78,7 @@ typedef struct openQCD_QudaSolver_s {
   int mg_qhat;                  /** qhat corresponding to the current mg-instance in QUDA */
 } openQCD_QudaSolver;
 
-static openQCD_QudaState_t qudaState = {false, -1, -1, -1, -1, 0.0, 0.0, 0.0, 0, {}, {}, { false, 1, MPI_COMM_NULL }, {}, {}, nullptr, {}, {}, ""};
+static openQCD_QudaState_t qudaState = {false, -1, -1, -1, -1, 0.0, 0.0, 0.0, 0, {}, {}, { false, 0.0, 1, MPI_COMM_NULL }, {}, {}, nullptr, {}, {}, ""};
 
 using namespace quda;
 
@@ -1944,6 +1945,9 @@ static void *openQCD_qudaInvertAsyncWrapper(void*)
   }
   free(h_sources);
   free(h_solutions);
+
+  qudaState.thread.time = (MPI_Wtime() - qudaState.thread.time);
+
   return nullptr;
 }
 
@@ -2001,11 +2005,12 @@ MPI_Comm openQCD_qudaInvertAsyncStart(void)
   }
 
   qudaState.thread.created = true;
+  qudaState.thread.time = MPI_Wtime();
   MPI_Comm_dup(qudaState.layout.world_comm, &qudaState.thread.comm);
   return qudaState.thread.comm;
 }
 
-void openQCD_qudaInvertAsyncWait(double *residual)
+double openQCD_qudaInvertAsyncWait(double *residual)
 {
   check_mpi_init();
 
@@ -2029,6 +2034,7 @@ void openQCD_qudaInvertAsyncWait(double *residual)
 
   MPI_Comm_free(&qudaState.thread.comm);
   qudaState.inv_args.clear();
+  return qudaState.thread.time;
 }
 
 
