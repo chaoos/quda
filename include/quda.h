@@ -538,6 +538,10 @@ extern "C" {
     /** Which part of the spectrum to solve **/
     QudaEigSpectrumType spectrum;
 
+     /**Eigenvalue shift if spectrum == QUDA_SPECTRUM_CM_EIG */
+    double shift_re;
+    double shift_im;
+
     /** Size of the eigenvector search space **/
     int n_ev;
     /** Total size of Krylov space **/

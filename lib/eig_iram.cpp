@@ -125,6 +125,7 @@ namespace quda
                      const QudaEigSpectrumType spec_type)
   {
     int n = n_kr;
+    Complex shift(eig_param->shift_re, eig_param->shift_im);
     std::vector<std::tuple<Complex, double, ColorSpinorField>> array(n);
     for (int i = 0; i < n; i++) array[i] = std::make_tuple(evals[i], residua[i], std::move(kSpace[i]));
 
@@ -169,6 +170,13 @@ namespace quda
                 [](const std::tuple<Complex, double, ColorSpinorField> &a,
                    const std::tuple<Complex, double, ColorSpinorField> &b) {
                   return (std::get<0>(a).imag() < std::get<0>(b).imag());
+                });
+      break;
+    case QUDA_SPECTRUM_CM_EIG:
+      std::sort(array.begin(), array.begin() + n,
+                [shift](const std::tuple<Complex, double, ColorSpinorField> &a,
+                   const std::tuple<Complex, double, ColorSpinorField> &b) {
+                  return (abs(std::get<0>(a) - shift) < abs(std::get<0>(b) - shift));
                 });
       break;
     default: errorQuda("Undefined spectrum type %d given", spec_type);
@@ -485,9 +493,10 @@ namespace quda
         double rtemp = std::max(epsilon23, abs(evals[idx]));
         if (residua[idx] < tol * rtemp) {
           iter_converged++;
-          logQuda(QUDA_DEBUG_VERBOSE, "residuum[%d] = %e, condition = %e\n", i, residua[idx], tol * abs(evals[idx]));
+          logQuda(QUDA_VERBOSE, "residuum[%d] = %e, condition = %e\n", i, residua[idx], tol * abs(evals[idx]));
         } else {
           // Unlikely to find new converged eigenvalues
+          logQuda(QUDA_VERBOSE, "residuum[%d] = %e, condition = %e\n", i, residua[idx], tol * abs(evals[idx]));
           break;
         }
       }

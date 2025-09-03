@@ -135,6 +135,7 @@
 #define QUDA_SPECTRUM_SR_EIG 3
 #define QUDA_SPECTRUM_LI_EIG 4
 #define QUDA_SPECTRUM_SI_EIG 5
+#define QUDA_SPECTRUM_CM_EIG 6
 #define QUDA_SPECTRUM_INVALID QUDA_INVALID_ENUM
 
 #define QudaSolutionType integer(4)

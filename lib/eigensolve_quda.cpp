@@ -67,6 +67,7 @@ namespace quda
     case QUDA_SPECTRUM_SR_EIG: spectrum = "SR"; break;
     case QUDA_SPECTRUM_LI_EIG: spectrum = "LI"; break;
     case QUDA_SPECTRUM_SI_EIG: spectrum = "SI"; break;
+    case QUDA_SPECTRUM_CM_EIG: spectrum = "CM"; break;
     default: errorQuda("Unexpected spectrum type %d", eig_param->spectrum);
     }
 
@@ -195,6 +196,7 @@ namespace quda
     logQuda(QUDA_SUMMARIZE, "********************************\n");
 
     logQuda(QUDA_VERBOSE, "spectrum %s\n", spectrum.c_str());
+    logQuda(QUDA_VERBOSE, "shift %.4e + %.4e\n", eig_param->shift_re, eig_param->shift_im);
     logQuda(QUDA_VERBOSE, "tol %.4e\n", tol);
     logQuda(QUDA_VERBOSE, "n_conv %d\n", n_conv);
     logQuda(QUDA_VERBOSE, "n_ev %d\n", n_ev);
@@ -694,10 +696,12 @@ namespace quda
       case QUDA_SPECTRUM_SR_EIG: printfQuda("'SR' -> sort with real(x) in increasing algebraic order, smallest first.\n"); break;
       case QUDA_SPECTRUM_LI_EIG: printfQuda("'LI' -> sort with imag(x) in decreasing algebraic order, largest first.\n"); break;
       case QUDA_SPECTRUM_SI_EIG: printfQuda("'SI' -> sort with imag(x) in increasing algebraic order, smallest first\n"); break;
+      case QUDA_SPECTRUM_CM_EIG: printfQuda("'CM' -> sort into increasing order of magnitude wrt z, smallest first.\n"); break;
       default: errorQuda("Unknown spectrum type requested: %d", spec_type);
       }
     }
 
+    Complex shift(eig_param->shift_re, eig_param->shift_im);
     std::vector<std::pair<Complex, Complex>> array(n);
     for (int i = 0; i < n; i++) array[i] = std::make_pair(x[i], y[i]);
 
@@ -736,6 +740,12 @@ namespace quda
       std::sort(array.begin(), array.begin() + n,
                 [](const std::pair<Complex, Complex> &a, const std::pair<Complex, Complex> &b) {
                   return (a.first).imag() > (b.first).imag();
+                });
+      break;
+    case QUDA_SPECTRUM_CM_EIG:
+      std::sort(array.begin(), array.begin() + n,
+                [shift](const std::pair<Complex, Complex> &a, const std::pair<Complex, Complex> &b) {
+                  return (abs(a.first - shift) > abs(b.first - shift));
                 });
       break;
     default: errorQuda("Undefined spectrum type %d given", spec_type);

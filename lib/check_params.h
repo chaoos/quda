@@ -181,6 +181,8 @@ void printQudaEigParam(QudaEigParam *param) {
   P(compute_svd, QUDA_BOOLEAN_FALSE);
   P(require_convergence, QUDA_BOOLEAN_TRUE);
   P(spectrum, QUDA_SPECTRUM_LR_EIG);
+  P(shift_re, 0.0);
+  P(shift_im, 0.0);
   P(n_ev, 0);
   P(n_kr, 0);
   P(n_conv, 0);
@@ -213,6 +215,8 @@ void printQudaEigParam(QudaEigParam *param) {
   P(compute_svd, QUDA_BOOLEAN_INVALID);
   P(require_convergence, QUDA_BOOLEAN_INVALID);
   P(spectrum, QUDA_SPECTRUM_INVALID);
+  P(shift_re, INVALID_DOUBLE);
+  P(shift_im, INVALID_DOUBLE);
   P(n_ev, INVALID_INT);
   P(n_kr, INVALID_INT);
   P(n_conv, INVALID_INT);

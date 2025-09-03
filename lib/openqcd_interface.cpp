@@ -279,6 +279,7 @@ std::unordered_map<std::string, std::string> enum_map
      {"QUDA_SPECTRUM_SR_EIG", std::to_string(QUDA_SPECTRUM_SR_EIG)},
      {"QUDA_SPECTRUM_LI_EIG", std::to_string(QUDA_SPECTRUM_LI_EIG)},
      {"QUDA_SPECTRUM_SI_EIG", std::to_string(QUDA_SPECTRUM_SI_EIG)},
+     {"QUDA_SPECTRUM_CM_EIG", std::to_string(QUDA_SPECTRUM_CM_EIG)},
      {"QUDA_SPECTRUM_INVALID", std::to_string(QUDA_SPECTRUM_INVALID)},
      {"QUDA_MEMORY_DEVICE", std::to_string(QUDA_MEMORY_DEVICE)},
      {"QUDA_MEMORY_DEVICE_PINNED", std::to_string(QUDA_MEMORY_DEVICE_PINNED)},
@@ -2101,6 +2102,8 @@ void *openQCD_qudaEigensolverReadIn(int id, int solver_id)
     param->compute_gamma5 = kv.get<QudaBoolean>(section, "compute_gamma5", param->compute_gamma5);
     param->require_convergence = kv.get<QudaBoolean>(section, "require_convergence", param->require_convergence);
     param->spectrum = kv.get<QudaEigSpectrumType>(section, "spectrum", param->spectrum);
+    param->shift_re = kv.get<double>(section, "shift_re", param->shift_re);
+    param->shift_im = kv.get<double>(section, "shift_im", param->shift_im);
     param->n_ev = kv.get<int>(section, "n_ev", param->n_ev);
     param->n_kr = kv.get<int>(section, "n_kr", param->n_kr);
     param->n_conv = kv.get<int>(section, "n_conv", param->n_conv);
@@ -2136,6 +2139,10 @@ void *openQCD_qudaEigensolverReadIn(int id, int solver_id)
 
   void *inv_param = openQCD_qudaSolverGetHandle(solver_id);
   param->invert_param = static_cast<QudaInvertParam *>(inv_param);
+
+  /* adjust the shift wrt QUDAs normalization convention */
+  param->shift_re *= (2.0 * param->invert_param->kappa);
+  param->shift_im *= (2.0 * param->invert_param->kappa);
 
   param->invert_param->verbosity = std::max(param->invert_param->verbosity, verbosity);
 

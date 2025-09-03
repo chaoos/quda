@@ -154,6 +154,7 @@ typedef enum QudaEigSpectrumType_s {
   QUDA_SPECTRUM_SR_EIG = 3,
   QUDA_SPECTRUM_LI_EIG = 4,
   QUDA_SPECTRUM_SI_EIG = 5,
+  QUDA_SPECTRUM_CM_EIG = 6,
   QUDA_SPECTRUM_INVALID = QUDA_INVALID_ENUM
 } QudaEigSpectrumType;
 
