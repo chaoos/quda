@@ -144,7 +144,10 @@ namespace quda
        @brief Helper function that returns the warp-size of the
        architecture we are running on.
     */
-    constexpr int warp_size() { return warpSize; }
+    constexpr int warp_size() {
+      // FIXME: Need to handle devices with different wavefront sizes
+      return 64;
+    }
 
     /**
        @brief Return the thread mask for a converged warp.
@@ -172,7 +175,7 @@ namespace quda
        the kernel arguments passed to a kernel on the target
        architecture.
     */
-    constexpr size_t max_kernel_arg_size() { return 4096; }
+    constexpr size_t max_kernel_arg_size() { return MAX_KERNEL_ARG_SIZE; }
 
     /**
        @brief Helper function that returns true if we are to pass the
